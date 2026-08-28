@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="sl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Propioscan združi uradne podatke GURS, PIS in druge prostorske evidence v razumljiv pregled slovenske parcele.">
+    <meta name="theme-color" content="#0d2038">
+    <meta property="og:title" content="Propioscan — pameten pregled nepremičnine">
+    <meta property="og:description" content="Uradni prostorski podatki, razloženi za boljše nepremičninske odločitve.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://propioscan.com/">
+    <meta property="og:image" content="https://propioscan.com/static/propioscan-mark.png">
+    <link rel="canonical" href="https://propioscan.com/">
+    <link rel="icon" type="image/png" href="/static/propioscan-mark.png">
+    <link rel="apple-touch-icon" href="/static/propioscan-mark.png">
+    <title>Propioscan — pameten pregled nepremičnine</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <a class="brand" href="/" aria-label="Propioscan domov">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="/static/propioscan-mark.png" alt="">
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name"><span class="brand-propio">Propio</span><span class="brand-scan">scan</span></span>
+            <small>podatki. jasne odločitve.</small>
+          </span>
+        </a>
+
+        <nav class="side-nav" aria-label="Potek analize">
+          <span class="side-label">Analiza parcele</span>
+          <a class="side-step is-active" href="#search-form"><b>1</b><span>Lokacija<small>Izberi parcelo</small></span></a>
+          <a class="side-step" href="#results"><b>2</b><span>Analiza<small>Uradni podatki</small></span></a>
+          <a class="side-step" href="#documents" data-open-result-tab="technical"><b>3</b><span>Rezultati<small>Tehnični pregled</small></span></a>
+          <a class="side-step" href="#location-report" data-open-result-tab="report"><b>4</b><span>Izpis<small>Lokacijska informacija</small></span></a>
+        </nav>
+
+        <nav class="side-nav side-sections" aria-label="Področja analize">
+          <span class="side-label">Področja analize</span>
+          <a href="#land-use-assessment">Namenska raba</a>
+          <a href="#planning-acts" data-open-result-tab="acts">Prostorski akti</a>
+          <a href="#infrastructure">Komunalna opremljenost</a>
+          <a href="#road-access">Dostop do ceste</a>
+          <a href="#protected-areas">Varovana območja</a>
+          <a href="#risks">Omejitve in tveganja</a>
+          <a href="#documents" data-open-result-tab="technical">Sekcija za projektante</a>
+          <a href="#location-report" data-open-result-tab="report">Informativni PDF izpis</a>
+        </nav>
+
+        <div class="sidebar-note">
+          <span class="sidebar-note-icon">?</span>
+          <div><strong>Potrebujete pomoč?</strong><small>Preverite, kako pravilno vnesete parcelo.</small></div>
+        </div>
+      </aside>
+
+      <div class="page-shell">
+        <header class="site-header">
+          <button class="mobile-menu" type="button" aria-label="Odpri navigacijo" aria-expanded="false">
+            <span></span><span></span><span></span>
+          </button>
+          <a class="mobile-brand" href="/" aria-label="Propioscan domov">
+            <img src="/static/propioscan-mark.png" alt="">
+            <strong><span>Propio</span><b>scan</b></strong>
+          </a>
+        </header>
+
+        <main>
+          <section class="hero" aria-labelledby="hero-title">
+            <div class="hero-content">
+              <div class="eyebrow">Propioscan · pametna analiza slovenskih parcel</div>
+              <h1 id="hero-title">Razumite parcelo,<br>preden sprejmete <span>odločitev.</span></h1>
+              <p class="hero-copy">Združujemo podatke GURS in PIS v pregleden odgovor o rabi, prostorskih aktih, infrastrukturi in omejitvah.</p>
+
+              <div class="hero-trust" aria-label="Ključne prednosti platforme">
+                <span class="trust-official">Uradni viri</span>
+                <span class="trust-spatial">Prostorski kontekst</span>
+                <span class="trust-ai">Razumljiva razlaga</span>
+              </div>
+
+              <form id="search-form" class="search-card">
+                <label for="parcel-number">Poiščite parcelo</label>
+                <div class="search-row">
+                  <div class="input-wrap">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
+                    <input id="parcel-number" name="parcel-number" type="text" list="recent-parcels" autocomplete="off" spellcheck="false" placeholder="Katastrska občina in številka parcele" required minlength="3" maxlength="40" aria-describedby="parcel-help">
+                    <datalist id="recent-parcels"></datalist>
+                  </div>
+                  <button id="search-button" type="submit">
+                    <span>Analiziraj</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                </div>
+                <div id="captcha-panel" class="captcha-panel" hidden>
+                  <div class="captcha-copy">
+                    <span class="captcha-shield" aria-hidden="true">✓</span>
+                    <div><strong>Varnostno preverjanje</strong><p>Pred analizo potrdite, da zahtevo pošilja oseba.</p></div>
+                  </div>
+                  <button id="captcha-check" class="captcha-check" type="button" disabled>
+                    <span aria-hidden="true">✓</span>
+                    <strong>Preveri, da nisem robot</strong>
+                  </button>
+                  <div id="turnstile-widget" class="turnstile-widget"></div>
+                  <p id="captcha-message" class="captcha-message" role="status" aria-live="polite">Nalagam preverjanje …</p>
+                </div>
+                <p id="parcel-help"><strong>Primer:</strong> 2057 314/4 · najprej ID katastrske občine, nato številka parcele.</p>
+              </form>
+
+              <div id="status" class="status-panel" role="status" aria-live="polite" hidden>
+                <div class="status-copy">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <div><strong id="status-title">Začenjamo iskanje …</strong><span id="status-detail">Povezujemo se z uradnimi viri.</span></div>
+                  <b id="status-percent">0%</b>
+                </div>
+                <div class="progress-track"><i id="status-progress"></i></div>
+              </div>
+              <div id="error" class="error-panel" role="alert" hidden></div>
+            </div>
+            <span class="hero-source">Informativna analiza javnih evidenc</span>
+          </section>
+
+          <section id="results" class="results" aria-labelledby="results-title" hidden>
+            <div class="result-heading">
+              <div>
+                <div class="result-title-line">
+                  <h2 id="results-title">Pregled parcele</h2>
+                  <span class="complete-pill"><i></i> Analiza zaključena</span>
+                </div>
+                <p>Podatki uradnih evidenc GURS in Prostorskega informacijskega sistema.</p>
+              </div>
+              <a class="source-link" href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener noreferrer">Odpri GURS <span>↗</span></a>
+            </div>
+
+            <nav id="result-tabs" class="result-tabs" aria-label="Področja rezultatov" role="tablist">
+              <button id="result-tab-overview" class="is-active" type="button" role="tab" aria-selected="true" aria-controls="result-panel-overview" data-result-tab="overview">Hitri pregled parcele</button>
+              <button id="result-tab-report" class="is-featured" type="button" role="tab" aria-selected="false" aria-controls="result-panel-report" data-result-tab="report"><span>Lokacijska informacija</span><small>PDF</small></button>
+              <button id="result-tab-technical" type="button" role="tab" aria-selected="false" aria-controls="result-panel-technical" data-result-tab="technical">Sekcija za projektante</button>
+              <button id="result-tab-acts" type="button" role="tab" aria-selected="false" aria-controls="result-panel-acts" data-result-tab="acts">Prostorski akti</button>
+            </nav>
+
+            <div class="result-layout">
+              <div class="result-main">
+                <section id="result-panel-overview" class="result-tab-panel" role="tabpanel" aria-labelledby="result-tab-overview" data-result-panel="overview">
+                  <div id="parcel-overview" class="parcel-overview"></div>
+
+                  <div class="subsection-heading" id="map-heading">
+                    <div><span class="section-kicker">Vsi prostorski prikazi na enem mestu</span><h3>Karte in posnetki parcele</h3></div>
+                    <p>Izberite zavihek za posamezno sliko</p>
+                  </div>
+                  <div id="parcel-visuals"></div>
+
+                  <div class="subsection-heading" id="land-use-map-heading">
+                    <div><span class="section-kicker">Razlaga uradnega šifranta</span><h3>Namenska raba parcele</h3></div>
+                    <p>Natančen geometrijski presek, deleži in površine</p>
+                  </div>
+                  <div id="land-use-assessment"></div>
+
+                  <div class="subsection-heading">
+                    <div><span class="section-kicker">GURS zbirni kataster GJI</span><h3>Komunalna opremljenost in dostop</h3></div>
+                    <p>Kratke točke; podrobnosti odprete po potrebi</p>
+                  </div>
+                  <div class="access-grid compact-access">
+                    <section class="compact-section" aria-labelledby="infrastructure-title"><h4 id="infrastructure-title">Komunalna opremljenost</h4><div id="infrastructure" class="infrastructure-grid"></div></section>
+                    <section class="compact-section" aria-labelledby="road-title"><h4 id="road-title">Dostop do javne ceste</h4><div id="road-access"></div></section>
+                  </div>
+
+                  <div class="subsection-heading">
+                    <div><span class="section-kicker">Hitra ocena uradnih prostorskih presekov</span><h3>Varovanja, omejitve in tveganja</h3></div>
+                    <p>Trafnik od zelene do rdeče; podrobnosti so zložene</p>
+                  </div>
+                  <div class="grade-scale" aria-label="Pomen luči od zelene (brez omejitev) do rdeče (več pomembnih omejitev)">
+                    <span class="grade-5"><b>5</b><small>Brez zadetka – brez omejitev</small></span>
+                    <span class="grade-4"><b>4</b><small>Brez pomembne omejitve</small></span>
+                    <span class="grade-3"><b>3</b><small>Opozorila – preveriti</small></span>
+                    <span class="grade-2"><b>2</b><small>Pomembna omejitev</small></span>
+                    <span class="grade-1"><b>1</b><small>Več pomembnih omejitev</small></span>
+                  </div>
+                  <div class="risk-score-grid">
+                    <div id="protected-areas"></div>
+                    <div id="cultural-heritage"></div>
+                    <div id="constraints"></div>
+                    <div id="risks"></div>
+                  </div>
+                  <p class="screening-disclaimer">Ocena je orientacijski povzetek števila in vrste vrnjenih zadetkov, ne pravna ali strokovna ocena resnosti. Ocena 5 pomeni le, da preverjeni sloji niso vrnili pomembnega preseka.</p>
+                </section>
+
+                <section id="result-panel-acts" class="result-tab-panel" role="tabpanel" aria-labelledby="result-tab-acts" data-result-panel="acts" hidden>
+                  <div class="pane-intro">
+                    <span class="section-kicker">Ločeno od osnovnega pregleda</span>
+                    <h3>Prostorski akti</h3>
+                    <p>Veljavni akti in akti v pripravi, povezane enote urejanja prostora ter neposredne povezave na uradne zapise PIS.</p>
+                  </div>
+                  <div class="subsection-heading compact-heading">
+                    <div><span class="section-kicker">EUP, PEUP in namenska raba</span><h3>Prostorski kontekst</h3></div>
+                  </div>
+                  <div id="planning-context" class="planning-context"></div>
+                  <div class="subsection-heading compact-heading">
+                    <div><span class="section-kicker">Veljavni in pripravljajoči akti</span><h3>Vsi povezani akti</h3></div>
+                  </div>
+                  <div id="planning-acts" class="planning-acts"></div>
+                </section>
+
+                <section id="result-panel-technical" class="result-tab-panel" role="tabpanel" aria-labelledby="result-tab-technical" data-result-panel="technical" hidden>
+                  <div class="pane-intro technical-intro">
+                    <span class="technical-badge">Sekcija za projektante</span>
+                    <h3>Tehnični pregled prostorskih dokumentov</h3>
+                    <p>Podrobni PDF-ji, izseki, strojni povzetki in izvorne povezave so namenjeni projektantom ter uporabnikom, ki želijo preveriti dokazila v globino.</p>
+                  </div>
+                  <section id="documents" class="documents technical-documents" aria-labelledby="documents-title">
+                    <div class="section-heading">
+                      <div><span class="section-kicker">Preneseno in analizirano</span><h2 id="documents-title">Prostorski dokumenti</h2></div>
+                      <div id="document-stats" class="document-stats"></div>
+                    </div>
+                    <div id="global-warnings" class="global-warnings"></div>
+                    <div id="document-list" class="document-list"></div>
+                  </section>
+                </section>
+
+                <section id="result-panel-report" class="result-tab-panel report-panel" role="tabpanel" aria-labelledby="result-tab-report" data-result-panel="report" hidden>
+                  <div id="location-report" class="report-intro">
+                    <div class="report-brand-line" aria-hidden="true">
+                      <span class="report-brand-mark"><i></i></span>
+                      <span><b>Propio</b><strong>scan</strong><small>Podatki. Jasne odločitve.</small></span>
+                    </div>
+                    <div class="report-intro-main">
+                      <div>
+                        <span class="report-kicker">Predizpolnjen pregled · Priloga 2</span>
+                        <h3>Lokacijska informacija</h3>
+                        <p>Informativni izpis z dejanskimi podatki analize, razporejenimi po desetih vsebinskih sklopih uradnega obrazca.</p>
+                      </div>
+                      <span class="report-document-badge">Ni uradna listina</span>
+                    </div>
+                    <div class="report-actions">
+                      <a id="report-download" class="report-download-button" href="#" download aria-disabled="true">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14"/></svg>
+                        <span id="report-download-label">Prenesi PDF z vsemi podatki</span>
+                      </a>
+                      <a class="official-template-link" href="https://pisrs.si/api/datoteke/integracije/351620891" target="_blank" rel="noopener noreferrer">Uradna prazna predloga <span>↗</span></a>
+                    </div>
+                    <p id="report-download-status" class="report-download-status" role="status" aria-live="polite" hidden></p>
+                  </div>
+
+                  <div class="report-meta" aria-label="Podatki izpisa">
+                    <div><span>Parcela</span><strong id="report-parcel-reference">—</strong></div>
+                    <div><span>Katastrska občina</span><strong id="report-cadastral-municipality">—</strong></div>
+                    <div><span>Občina</span><strong id="report-municipality">—</strong></div>
+                    <div><span>Analiza zaključena</span><strong id="report-completed-at">—</strong></div>
+                  </div>
+
+                  <div class="report-notice" role="note">
+                    <span aria-hidden="true">i</span>
+                    <div><strong>Informativni osnutek, ne uradna listina</strong><p>Propioscan ne izdaja lokacijske informacije. Uradni dokument, podpis, žig in pravno veljavne odgovore lahko izda samo pristojna občina.</p></div>
+                  </div>
+
+                  <div class="report-status-legend" aria-label="Pomen oznak v izpisu">
+                    <span class="report-status is-automatic"><i></i> Samodejno izpolnjeno</span>
+                    <span class="report-status is-partial"><i></i> Delno izpolnjeno</span>
+                    <span class="report-status is-review"><i></i> Preverite pri občini</span>
+                  </div>
+
+                  <div id="official-form-preview" class="official-form-preview"></div>
+                </section>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer id="legal-notice" class="site-footer">
+          <div class="footer-main">
+            <section class="footer-brand-block" aria-label="O platformi Propioscan">
+              <a class="footer-brand" href="/" aria-label="Propioscan domov">
+                <img src="/static/propioscan-mark.png" alt="">
+                <span><b>Propio</b><strong>scan</strong></span>
+              </a>
+              <p>Digitalna platforma za hiter, pregleden in sledljiv pregled slovenskih parcel ter uradnih prostorskih podatkov.</p>
+              <a class="footer-domain" href="https://propioscan.com/">propioscan.com</a>
+            </section>
+
+            <section class="footer-column">
+              <h2>Platforma</h2>
+              <a href="#search-form">Analiza parcele</a>
+              <a href="#planning-acts" data-open-result-tab="acts">Prostorski akti</a>
+              <a href="#documents" data-open-result-tab="technical">Za projektante</a>
+              <a href="mailto:info@propioscan.com">info@propioscan.com</a>
+              <button class="footer-link-button" type="button" data-cookie-settings>Nastavitve piškotkov</button>
+              <button class="footer-link-button" type="button" data-privacy-open>Politika zasebnosti</button>
+            </section>
+
+            <section class="footer-column">
+              <h2>Uradni viri</h2>
+              <a href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener noreferrer">GURS / E-prostor <span>↗</span></a>
+              <a href="https://pis.eprostor.gov.si/" target="_blank" rel="noopener noreferrer">PIS <span>↗</span></a>
+              <a href="https://ipi.eprostor.gov.si/" target="_blank" rel="noopener noreferrer">GeoHub <span>↗</span></a>
+              <a href="https://gisportal.gov.si/evrd" target="_blank" rel="noopener noreferrer">eVRD <span>↗</span></a>
+            </section>
+
+            <section class="footer-column footer-company">
+              <h2>Podjetje in licenca</h2>
+              <p><strong>Propioscan</strong><br>Razvoj in upravljanje digitalne platforme<br>Slovenija · Evropska unija</p>
+              <p>Programska oprema, vsebine in oblikovanje © 2026 Propioscan. Vse pravice pridržane.</p>
+              <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">Podatki GURS · CC BY 4.0 <span>↗</span></a>
+            </section>
+          </div>
+
+          <div class="footer-legal">
+            <p><strong>Pomembno:</strong> rezultati so informativni in niso lokacijska informacija, upravna odločba, geodetski elaborat ali pravno mnenje. Končne odločitve vedno preverite v veljavnih aktih in pri pristojni občini oziroma strokovnjaku.</p>
+            <p>Podatki in dokumenti ostajajo pod pogoji ter odgovornostjo svojih uradnih izdajateljev. Propioscan vedno navede uporabljeni vir.</p>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <section id="cookie-banner" class="cookie-banner" aria-label="Nastavitve zasebnosti" hidden>
+      <div class="cookie-banner-icon" aria-hidden="true">◔</div>
+      <div class="cookie-banner-copy">
+        <strong>Vaša zasebnost, vaša izbira</strong>
+        <p>Propioscan uporablja nujni piškotek za shranjevanje vaše izbire. Z dovoljenjem lahko na tej napravi shrani nedavna iskanja in psevdonimno zabeleži, katera parcela je bila iskana. Ne uporabljamo oglaševalskih piškotkov.</p>
+        <button type="button" data-privacy-open>Preberite politiko zasebnosti</button>
+      </div>
+      <div class="cookie-banner-actions">
+        <button id="cookie-reject" class="cookie-button cookie-button-secondary" type="button">Samo nujni</button>
+        <button class="cookie-button cookie-button-secondary" type="button" data-cookie-settings>Nastavitve</button>
+        <button id="cookie-accept" class="cookie-button cookie-button-primary" type="button">Sprejmi vse</button>
+      </div>
+    </section>
+
+    <dialog id="cookie-dialog" class="privacy-dialog" aria-labelledby="cookie-dialog-title">
+      <div class="privacy-dialog-head">
+        <div><span>Propioscan · zasebnost</span><h2 id="cookie-dialog-title">Nastavitve piškotkov</h2></div>
+        <button class="dialog-close" type="button" data-cookie-close aria-label="Zapri nastavitve">×</button>
+      </div>
+      <p class="privacy-dialog-intro">Nenujne možnosti so privzeto izključene. Izbiro lahko kadar koli spremenite; preklic soglasja ne vpliva na zakonitost pretekle obdelave.</p>
+
+      <div class="privacy-choices">
+        <label class="privacy-choice is-required">
+          <input type="checkbox" checked disabled>
+          <span><strong>Nujni piškotki</strong><small>Vedno aktivni · shranijo samo vašo izbiro zasebnosti in omogočajo varno delovanje strani.</small></span>
+          <b>Vedno</b>
+        </label>
+        <label class="privacy-choice">
+          <input id="cookie-functional" type="checkbox">
+          <span><strong>Funkcionalno lokalno shranjevanje</strong><small>Zapomni si največ 10 nedavnih parcelnih poizvedb na tej napravi, da jih lahko hitreje ponovno izberete. Podatek se ne pošlje strežniku zaradi te funkcije.</small></span>
+          <b>Izbirno</b>
+        </label>
+        <label class="privacy-choice">
+          <input id="cookie-analytics" type="checkbox">
+          <span><strong>Psevdonimna analitika</strong><small>Strežnik za največ 90 dni shrani naključni ID brskalnika, čas in iskano parcelno oznako. Ne shranimo imena, e-pošte, naslova IP ali vsebine dokumentov v analitični zapis. Ob izklopu izbrišemo ID in z njim povezane dogodke.</small></span>
+          <b>Izbirno</b>
+        </label>
+      </div>
+
+      <details class="cookie-inventory">
+        <summary>Podroben seznam piškotkov in lokalne hrambe</summary>
+        <div class="cookie-table-wrap">
+          <table>
+            <thead><tr><th>Ime</th><th>Vrsta</th><th>Namen</th><th>Hramba</th></tr></thead>
+            <tbody>
+              <tr><td><code>propioscan_cookie_consent</code></td><td>Nujni piškotek</td><td>Izbrane kategorije in različica soglasja</td><td>180 dni</td></tr>
+              <tr><td><code>propioscan_recent_searches</code></td><td>Lokalna shramba</td><td>Največ 10 nedavnih parcelnih poizvedb</td><td>30 dni</td></tr>
+              <tr><td><code>propioscan_visitor_id</code></td><td>Analitični piškotek, HttpOnly</td><td>Naključni psevdonimni ID za povezavo dovoljenih iskalnih dogodkov</td><td>90 dni</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="privacy-dialog-actions">
+        <button class="cookie-button cookie-button-ghost" type="button" data-cookie-close>Prekliči</button>
+        <button id="cookie-save" class="cookie-button cookie-button-secondary" type="button">Shrani izbiro</button>
+        <button id="cookie-dialog-accept" class="cookie-button cookie-button-primary" type="button">Sprejmi vse</button>
+      </div>
+    </dialog>
+
+    <dialog id="privacy-dialog" class="privacy-dialog privacy-policy-dialog" aria-labelledby="privacy-dialog-title">
+      <div class="privacy-dialog-head">
+        <div><span>Različica 1.0 · 26. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
+        <button class="dialog-close" type="button" data-privacy-close aria-label="Zapri politiko zasebnosti">×</button>
+      </div>
+
+      <div class="privacy-policy-content">
+        <section>
+          <h3>1. Upravljavec in kontakt</h3>
+          <p>Upravljavec platforme je <strong>Propioscan, Slovenija, Evropska unija</strong>. Za vprašanja, dostop, popravek, izbris ali preklic soglasja pišite na <a href="mailto:info@propioscan.com">info@propioscan.com</a>.</p>
+        </section>
+        <section>
+          <h3>2. Katere podatke obdelujemo</h3>
+          <p>Za izvedbo analize obdelamo vneseno katastrsko občino in parcelno številko, rezultate uradnih evidenc ter začasni identifikator opravila. Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako.</p>
+          <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
+          <p>Analitični zapis ne vsebuje vašega imena, e-pošte, naslova IP, oglaševalskega profila ali vsebine prenesenih dokumentov. Naključni ID označuje brskalnik in ni potrjena identiteta osebe.</p>
+        </section>
+        <section>
+          <h3>3. Nameni in pravne podlage</h3>
+          <ul>
+            <li><strong>Izvedba zahtevane analize in varnost storitve:</strong> obdelava, potrebna za odgovor na vašo zahtevo in zakoniti interes zagotavljanja delujoče ter varne storitve.</li>
+            <li><strong>Nedavna iskanja:</strong> vaše soglasje; funkcijo lahko zavrnete ali kadar koli izključite.</li>
+            <li><strong>Psevdonimna analitika:</strong> vaše soglasje; uporablja se za razumevanje uporabe in izboljšanje storitve.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>4. Viri, prejemniki in prenosi</h3>
+          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo. Ponudnika lahko podatke obdelujeta zunaj EGP skladno z veljavnimi pogodbenimi zaščitami upravljavca. Pred javnim zagonom mora upravljavec potrditi ustrezne pogodbe o obdelavi podatkov in mehanizme prenosa.</p>
+          <p>Propioscan podatkov ne prodaja in ne uporablja oglaševalskih ali profilirnih piškotkov.</p>
+        </section>
+        <section>
+          <h3>5. Roki hrambe</h3>
+          <ul>
+            <li>izbira piškotkov: 180 dni;</li>
+            <li>nedavna iskanja v vašem brskalniku: 30 dni oziroma do preklica;</li>
+            <li>psevdonimni ID in dovoljeni analitični dogodki: največ 90 dni;</li>
+            <li>rezultati trenutnega opravila: v pomnilniku strežnika do ponovnega zagona aplikacije;</li>
+            <li>predpomnjeni uradni dokumenti in zemljevidi: niso povezani z analitičnim ID-jem in se hranijo za učinkovito ponovno uporabo.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>6. Vaše pravice</h3>
+          <p>Glede na pogoje GDPR lahko zahtevate dostop, popravek, izbris, omejitev obdelave, prenosljivost in ugovarjate obdelavi. Soglasje lahko kadar koli prekličete v nastavitvah piškotkov. Pritožbo lahko vložite pri <a href="https://www.ip-rs.si/" target="_blank" rel="noopener noreferrer">Informacijskem pooblaščencu Republike Slovenije <span>↗</span></a>.</p>
+        </section>
+        <section>
+          <h3>7. Avtomatizirana razlaga</h3>
+          <p>AI-povzetek in ocene so informativna pomoč, ne odločitev s pravnim ali podobno pomembnim učinkom. Ne nadomestijo veljavnega prostorskega akta, lokacijske informacije, upravne odločbe ali strokovnega mnenja.</p>
+        </section>
+        <section class="privacy-compliance-note">
+          <h3>Pred javnim zagonom</h3>
+          <p>V tej politiki je treba dopolniti polno registrirano ime upravljavca, poslovni naslov, matično in davčno številko ter potrditi dejanske pogodbe z obdelovalci. Ta tehnična izvedba sama po sebi ni pravno svetovanje ali jamstvo popolne skladnosti.</p>
+        </section>
+      </div>
+
+      <div class="privacy-dialog-actions">
+        <button class="cookie-button cookie-button-secondary" type="button" data-cookie-settings>Nastavitve piškotkov</button>
+        <button class="cookie-button cookie-button-primary" type="button" data-privacy-close>Zapri</button>
+      </div>
+    </dialog>
+  </body>
+</html>
