@@ -38,6 +38,10 @@ The application uses the public [GURS WFS services](https://www.e-prostor.gov.si
 - Optional OCR through an installed `ocrmypdf` executable; scanned-page limitations are shown per document when OCR is unavailable.
 - Optional OpenAI parcel-specific structured summaries. Without an API key, the app remains fully usable and shows a clearly labelled extractive fallback.
 - Background jobs with progress polling, so long downloads do not hold open one browser request.
+- Thread-backed jobs are the local-development default. WSGI/Passenger hosting
+  can set `JOB_EXECUTION_MODE=process` (and, when needed,
+  `JOB_PYTHON_EXECUTABLE`) to detach each analysis from the short-lived web
+  worker that accepted it.
 - Cloudflare Turnstile protects the analysis endpoint with a user-triggered,
   server-validated, single-use anti-bot token. Local development uses Cloudflare's
   interactive test widget; production must replace both test keys.
@@ -172,6 +176,7 @@ published localhost test credentials.
 The application can be started directly with Uvicorn as shown above or built
 with the included `Dockerfile`. On WSGI-only CloudLinux hosting,
 `passenger_wsgi.py` delegates to the fork-safe synchronous bridge in
-`propioscan_wsgi.py`. Hosting-account paths, credentials, private keys, and
-provider-specific deployment state intentionally do not belong in this
+`propioscan_wsgi.py`; configure detached process jobs so an LSAPI recycle cannot
+interrupt a running analysis. Hosting-account paths, credentials, private keys,
+and provider-specific deployment state intentionally do not belong in this
 repository.

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from app.models import JobStatus
 from app.jobs import JobManager
 
 
@@ -44,5 +45,61 @@ def test_job_state_rejects_path_traversal_ids(tmp_path: Path) -> None:
     manager = JobManager(IdleService(), workers=1, data_dir=tmp_path)
     try:
         assert manager.get("../secrets") is None
+    finally:
+        manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_process_mode_launches_a_detached_disk_job(
+    tmp_path: Path, monkeypatch
+) -> None:
+    launched: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_popen(command, **kwargs):
+        launched.append((command, kwargs))
+        return object()
+
+    monkeypatch.setattr("app.jobs.subprocess.Popen", fake_popen)
+    manager = JobManager(
+        IdleService(),
+        workers=1,
+        data_dir=tmp_path,
+        execution_mode="process",
+        base_dir=tmp_path,
+        python_executable="/runtime/python",
+    )
+    try:
+        job = manager.submit("2057 314/4")
+
+        assert job.status == JobStatus.queued
+        assert len(launched) == 1
+        command, options = launched[0]
+        assert command == ["/runtime/python", "-m", "app.job_worker", job.id]
+        assert options["cwd"] == tmp_path
+        assert options["start_new_session"] is True
+        assert options["close_fds"] is True
+        assert (tmp_path / "jobs" / f"{job.id}.json").is_file()
+    finally:
+        manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_process_launch_failure_is_persisted(tmp_path: Path, monkeypatch) -> None:
+    def fail_to_launch(*args, **kwargs):
+        raise OSError("process unavailable")
+
+    monkeypatch.setattr("app.jobs.subprocess.Popen", fail_to_launch)
+    manager = JobManager(
+        IdleService(),
+        workers=1,
+        data_dir=tmp_path,
+        execution_mode="process",
+        python_executable="/runtime/python",
+    )
+    try:
+        submitted = manager.submit("2057 314/4")
+        job = manager.get(submitted.id)
+
+        assert job is not None
+        assert job.status == JobStatus.failed
+        assert "ozadju" in (job.error or "")
     finally:
         manager.executor.shutdown(wait=False, cancel_futures=True)

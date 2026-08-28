@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import threading
-import uuid
 import logging
 import os
+import subprocess
+import sys
+import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +24,10 @@ class JobManager:
         service: ParcelSearchService,
         workers: int,
         data_dir: Path | None = None,
+        *,
+        execution_mode: str = "thread",
+        base_dir: Path | None = None,
+        python_executable: str | None = None,
     ) -> None:
         self.service = service
         self.executor = ThreadPoolExecutor(
@@ -30,8 +36,14 @@ class JobManager:
         self._jobs: dict[str, JobView] = {}
         self._lock = threading.Lock()
         self._jobs_dir = data_dir / "jobs" if data_dir is not None else None
+        self._worker_log = data_dir / "logs" / "job-worker.log" if data_dir else None
+        self.execution_mode = execution_mode
+        self.base_dir = base_dir or Path.cwd()
+        self.python_executable = python_executable
         if self._jobs_dir is not None:
             self._jobs_dir.mkdir(parents=True, exist_ok=True)
+        if self._worker_log is not None:
+            self._worker_log.parent.mkdir(parents=True, exist_ok=True)
 
     def submit(self, parcel_number: str) -> JobView:
         now = datetime.now(timezone.utc)
@@ -47,8 +59,52 @@ class JobManager:
         with self._lock:
             self._jobs[job.id] = job
             self._persist_locked(job)
-        self.executor.submit(self._run, job.id, parcel_number)
+        if self.execution_mode == "process":
+            self._start_process_worker(job.id)
+        else:
+            self.executor.submit(self._run, job.id, parcel_number)
         return job.model_copy(deep=True)
+
+    def run_persisted(self, job_id: str) -> JobView | None:
+        """Run one queued disk-backed job in the current process."""
+
+        job = self._load(job_id)
+        if job is None or job.status != JobStatus.queued:
+            return job
+        with self._lock:
+            self._jobs[job_id] = job
+        self._run(job_id, job.parcel_number)
+        return self.get(job_id)
+
+    def _start_process_worker(self, job_id: str) -> None:
+        executable = self.python_executable or sys.executable
+        if Path(executable).name == "lswsgi":
+            candidate = Path(sys.prefix) / "bin" / "python"
+            if candidate.is_file():
+                executable = str(candidate)
+        command = [executable, "-m", "app.job_worker", job_id]
+        environment = os.environ.copy()
+        environment["PYTHONUNBUFFERED"] = "1"
+        try:
+            if self._worker_log is None:
+                raise OSError("The process job log directory is not configured.")
+            with self._worker_log.open("ab", buffering=0) as worker_log:
+                subprocess.Popen(
+                    command,
+                    cwd=self.base_dir,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=worker_log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        except OSError:
+            logger.exception("Could not start the detached worker for job %s", job_id)
+            self._fail(
+                job_id,
+                "Analize ni bilo mogoče zagnati v ozadju. Poskusite znova pozneje.",
+            )
 
     def get(self, job_id: str) -> JobView | None:
         disk_job = self._load(job_id)

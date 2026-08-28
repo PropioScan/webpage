@@ -28,7 +28,14 @@ logger = logging.getLogger(__name__)
 
 settings.ensure_directories()
 service = ParcelSearchService(settings)
-jobs = JobManager(service, settings.search_workers, settings.data_dir)
+jobs = JobManager(
+    service,
+    settings.search_workers,
+    settings.data_dir,
+    execution_mode=settings.job_execution_mode,
+    base_dir=settings.base_dir,
+    python_executable=settings.job_python_executable,
+)
 privacy_events = PrivacyEventStore(
     settings.data_dir,
     retention_days=settings.privacy_retention_days,

@@ -49,6 +49,8 @@ class Settings:
     captcha_required: bool = False
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
+    job_execution_mode: str = "thread"
+    job_python_executable: str | None = None
 
     @property
     def captcha_configured(self) -> bool:
@@ -60,6 +62,9 @@ class Settings:
         configured_data_dir = Path(os.getenv("DATA_DIR", "./data"))
         if not configured_data_dir.is_absolute():
             configured_data_dir = base_dir / configured_data_dir
+        job_execution_mode = os.getenv("JOB_EXECUTION_MODE", "thread").strip().lower()
+        if job_execution_mode not in {"thread", "process"}:
+            job_execution_mode = "thread"
         return cls(
             base_dir=base_dir,
             data_dir=configured_data_dir.resolve(),
@@ -67,6 +72,8 @@ class Settings:
             openai_model=os.getenv("OPENAI_MODEL", "gpt-5.6-sol"),
             summary_language=os.getenv("SUMMARY_LANGUAGE", "Slovenian"),
             search_workers=max(1, _int("SEARCH_WORKERS", 2)),
+            job_execution_mode=job_execution_mode,
+            job_python_executable=os.getenv("JOB_PYTHON_EXECUTABLE") or None,
             http_timeout_seconds=max(5.0, _float("HTTP_TIMEOUT_SECONDS", 60.0)),
             max_archive_bytes=max(1, _int("MAX_ARCHIVE_MB", 500)) * 1024 * 1024,
             max_pdf_bytes=max(1, _int("MAX_PDF_MB", 500)) * 1024 * 1024,
@@ -90,6 +97,7 @@ class Settings:
             self.data_dir / "map_previews",
             self.data_dir / "privacy",
             self.data_dir / "jobs",
+            self.data_dir / "logs",
         ):
             path.mkdir(parents=True, exist_ok=True)
 
