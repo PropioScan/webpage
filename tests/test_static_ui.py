@@ -193,6 +193,9 @@ def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
     assert page.xpath("//*[@id='filter-group']")
     assert page.xpath("//*[@id='filter-ip']")
     assert 'action: "admin_login"' in script
+    assert 'appearance: "interaction-only"' in script
+    assert 'execution: "execute"' in script
+    assert "window.turnstile.execute(turnstileWidget)" in script
     assert 'credentials: "same-origin"' in script
     assert "filterQuery(false)" in script
     assert "Tehnična skupina ni oseba" in page.text_content()

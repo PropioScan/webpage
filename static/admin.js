@@ -12,6 +12,8 @@ const pageStatus = document.querySelector("#page-status");
 const PAGE_SIZE = 100;
 let captchaToken = null;
 let turnstileWidget = null;
+let captchaRequired = true;
+let pendingLogin = null;
 let currentOffset = 0;
 let currentData = null;
 
@@ -49,6 +51,7 @@ async function prepareLogin() {
     return;
   }
   if (!config.captcha_required) {
+    captchaRequired = false;
     humanStatus.textContent = "Varnostno preverjanje v tem okolju ni zahtevano.";
     loginButton.disabled = false;
     return;
@@ -57,39 +60,65 @@ async function prepareLogin() {
     showLoginError("Varnostno preverjanje ni konfigurirano.");
     return;
   }
-  await loadTurnstile();
-  turnstileWidget = window.turnstile.render("#admin-turnstile", {
-    sitekey: config.turnstile_site_key,
-    action: "admin_login",
-    appearance: "always",
-    execution: "render",
-    language: "sl",
-    callback: (token) => {
-      captchaToken = token;
-      humanStatus.textContent = "Preverjanje je uspešno. Prijava je omogočena.";
-      humanStatus.classList.add("is-success");
-      loginButton.disabled = false;
-    },
-    "expired-callback": resetCaptcha,
-    "error-callback": () => {
-      resetCaptcha();
-      showLoginError("Varnostno preverjanje ni uspelo. Poskusite znova.");
-    },
-  });
+  try {
+    await loadTurnstile();
+    turnstileWidget = window.turnstile.render("#admin-turnstile", {
+      sitekey: config.turnstile_site_key,
+      action: "admin_login",
+      appearance: "interaction-only",
+      execution: "execute",
+      language: "sl",
+      callback: (token) => {
+        captchaToken = token;
+        humanStatus.textContent = "Preverjanje je uspešno. Prijavljam …";
+        humanStatus.classList.add("is-success");
+        completeLogin();
+      },
+      "expired-callback": () => resetCaptcha("Preverjanje je poteklo. Kliknite Prijavi se za nov poskus."),
+      "error-callback": () => {
+        pendingLogin = null;
+        resetCaptcha("Preverjanje ni uspelo. Kliknite Prijavi se in poskusite znova.");
+        showLoginError("Varnostno preverjanje ni uspelo. Poskusite znova.");
+      },
+    });
+    humanStatus.textContent = "Varnostno preverjanje se bo začelo, ko kliknete Prijavi se.";
+    loginButton.disabled = false;
+  } catch {
+    showLoginError("Varnostnega preverjanja ni bilo mogoče naložiti.");
+    humanStatus.textContent = "Osvežite stran in poskusite znova.";
+  }
 }
 
-async function login(event) {
+function login(event) {
   event.preventDefault();
   if (loginButton.disabled) return;
+  pendingLogin = {
+    username: document.querySelector("#admin-username").value,
+    password: document.querySelector("#admin-password").value,
+  };
   loginButton.disabled = true;
   loginButton.textContent = "Preverjam …";
   loginError.hidden = true;
+  if (captchaRequired) {
+    captchaToken = null;
+    humanStatus.textContent = "Opravljam varnostno preverjanje …";
+    humanStatus.classList.remove("is-success");
+    window.turnstile.execute(turnstileWidget);
+    return;
+  }
+  completeLogin();
+}
+
+async function completeLogin() {
+  if (!pendingLogin) return;
+  const credentials = pendingLogin;
+  pendingLogin = null;
   const response = await api("/api/admin/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      username: document.querySelector("#admin-username").value,
-      password: document.querySelector("#admin-password").value,
+      username: credentials.username,
+      password: credentials.password,
       captcha_token: captchaToken,
     }),
   });
@@ -100,13 +129,14 @@ async function login(event) {
   }
   showLoginError(response?.detail || "Prijava ni uspela.");
   loginButton.textContent = "Prijavi se";
-  resetCaptcha();
+  resetCaptcha("Kliknite Prijavi se za nov varnostni pregled.");
 }
 
-function resetCaptcha() {
+function resetCaptcha(message) {
   captchaToken = null;
-  loginButton.disabled = true;
-  humanStatus.textContent = "Ponovno opravite varnostno preverjanje.";
+  pendingLogin = null;
+  loginButton.disabled = false;
+  humanStatus.textContent = message || "Varnostno preverjanje se bo začelo ob prijavi.";
   humanStatus.classList.remove("is-success");
   if (turnstileWidget !== null && window.turnstile) window.turnstile.reset(turnstileWidget);
 }
