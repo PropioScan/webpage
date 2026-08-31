@@ -6,8 +6,8 @@
     <meta name="robots" content="noindex,nofollow,noarchive">
     <meta name="theme-color" content="#10243d">
     <link rel="icon" type="image/png" href="/static/propioscan-mark.png">
-    <link rel="stylesheet" href="/static/admin.css?v=2">
-    <script src="/static/admin.js?v=2" defer></script>
+    <link rel="stylesheet" href="/static/admin.css?v=3">
+    <script src="/static/admin.js?v=3" defer></script>
     <title>Propioscan · skrbniška plošča</title>
   </head>
   <body>
@@ -43,8 +43,9 @@
           </a>
           <nav aria-label="Skrbniška področja">
             <button class="admin-tab is-active" type="button" data-admin-tab="overview"><span>01</span>Pregled</button>
-            <button class="admin-tab" type="button" data-admin-tab="requests"><span>02</span>Zahteve za parcele</button>
-            <button class="admin-tab" type="button" data-admin-tab="logs"><span>03</span>Dnevniki aplikacije</button>
+            <button class="admin-tab" type="button" data-admin-tab="analytics"><span>02</span>Google Analytics</button>
+            <button class="admin-tab" type="button" data-admin-tab="requests"><span>03</span>Zahteve za parcele</button>
+            <button class="admin-tab" type="button" data-admin-tab="logs"><span>04</span>Dnevniki aplikacije</button>
           </nav>
           <div class="admin-sidebar-foot">
             <p>Prijavljen: <strong id="admin-session-user">—</strong></p>
@@ -77,6 +78,43 @@
               <header><div><span>Najnovejše</span><h2>Zadnje zahteve</h2></div></header>
               <div class="table-scroll"><table><thead><tr><th>Čas</th><th>Parcela</th><th>Stanje</th><th>Naprava</th><th>IP</th></tr></thead><tbody id="overview-requests"></tbody></table></div>
             </article>
+          </section>
+
+          <section class="admin-panel" data-admin-panel="analytics" hidden>
+            <div class="analytics-toolbar">
+              <label>Obdobje<select id="analytics-period"><option value="7">Zadnjih 7 dni</option><option value="30" selected>Zadnjih 30 dni</option><option value="90">Zadnjih 90 dni</option></select></label>
+              <button id="analytics-refresh" type="button">Osveži podatke</button>
+              <a id="analytics-download" href="/api/admin/analytics.csv?days=30" download>Prenesi CSV</a>
+              <a class="analytics-external" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Odpri Google Analytics ↗</a>
+            </div>
+
+            <div id="analytics-message" class="analytics-message" role="status" aria-live="polite">Nalagam Google Analytics …</div>
+            <div id="analytics-content" hidden>
+              <div id="analytics-summary" class="summary-grid"></div>
+              <div class="analytics-grid">
+                <article class="analytics-card analytics-card-wide">
+                  <header><div><span>Trend</span><h2>Obiski po dnevih</h2></div><p id="analytics-generated">—</p></header>
+                  <div id="analytics-daily" class="analytics-bars"></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Pridobivanje</span><h2>Viri obiskov</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Vir</th><th>Seje</th><th>Uporabniki</th></tr></thead><tbody id="analytics-channels"></tbody></table></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Uporaba</span><h2>Dogodki Propioscan</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Dogodek</th><th>Število</th></tr></thead><tbody id="analytics-events"></tbody></table></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Tehnologija</span><h2>Naprave</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Naprava</th><th>Uporabniki</th></tr></thead><tbody id="analytics-devices"></tbody></table></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Lokacija</span><h2>Države</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Država</th><th>Uporabniki</th></tr></thead><tbody id="analytics-countries"></tbody></table></div>
+                </article>
+              </div>
+              <p class="analytics-privacy-note">Prikazane so samo združene meritve uporabnikov, ki so dovolili analitične piškotke. Številke parcel se v Google Analytics ne pošiljajo.</p>
+            </div>
           </section>
 
           <section class="admin-panel" data-admin-panel="requests" hidden>

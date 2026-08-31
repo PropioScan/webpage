@@ -160,6 +160,23 @@ two months, disable all Enhanced Measurement events except page views, do not
 link Google Ads, and keep Google Signals disabled. The public privacy notice and
 consent version already cover this restricted configuration.
 
+The protected admin panel can also read aggregate reports through the Google
+Analytics Data API. This requires a numeric GA4 Property ID and a dedicated
+service-account JSON file; the public Measurement ID alone cannot read reports.
+Enable the Google Analytics Data API in the service account's Google Cloud
+project, add its email to the GA4 property with the Viewer role, store the JSON
+outside the repository with mode `0600`, and set:
+
+```dotenv
+GOOGLE_ANALYTICS_PROPERTY_ID=123456789
+GOOGLE_ANALYTICS_CREDENTIALS_FILE=/absolute/private/path/ga4-service-account.json
+```
+
+The server requests only aggregate users, sessions, page views, channels,
+devices, countries, and allowlisted Propioscan event totals. Reports are cached
+for five minutes and can be exported as CSV from the admin panel. Never commit
+the service-account JSON or place it under the public document root.
+
 Before a public launch, replace the generic controller details in the privacy
 notice with the registered company name, address, registration/VAT details,
 and confirmed processor/DPA information. The implementation is a technical

@@ -60,6 +60,8 @@ class Settings:
     admin_session_secret: str | None = None
     admin_session_hours: int = 8
     google_analytics_measurement_id: str | None = None
+    google_analytics_property_id: str | None = None
+    google_analytics_credentials_file: Path | None = None
 
     @property
     def captcha_configured(self) -> bool:
@@ -74,12 +76,31 @@ class Settings:
             )
         )
 
+    @property
+    def google_analytics_reporting_configured(self) -> bool:
+        return bool(
+            self.google_analytics_property_id
+            and re.fullmatch(r"[1-9][0-9]{5,19}", self.google_analytics_property_id)
+            and self.google_analytics_credentials_file
+            and self.google_analytics_credentials_file.is_file()
+        )
+
     @classmethod
     def from_env(cls) -> "Settings":
         base_dir = Path(__file__).resolve().parent.parent
         configured_data_dir = Path(os.getenv("DATA_DIR", "./data"))
         if not configured_data_dir.is_absolute():
             configured_data_dir = base_dir / configured_data_dir
+        analytics_credentials_value = os.getenv(
+            "GOOGLE_ANALYTICS_CREDENTIALS_FILE", ""
+        ).strip()
+        analytics_credentials_file = (
+            Path(os.path.expandvars(os.path.expanduser(analytics_credentials_value)))
+            if analytics_credentials_value
+            else None
+        )
+        if analytics_credentials_file and not analytics_credentials_file.is_absolute():
+            analytics_credentials_file = base_dir / analytics_credentials_file
         job_execution_mode = os.getenv("JOB_EXECUTION_MODE", "thread").strip().lower()
         if job_execution_mode not in {"thread", "process"}:
             job_execution_mode = "thread"
@@ -114,6 +135,15 @@ class Settings:
             google_analytics_measurement_id=(
                 os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "").strip().upper()
                 or None
+            ),
+            google_analytics_property_id=(
+                os.getenv("GOOGLE_ANALYTICS_PROPERTY_ID", "").strip()
+                or None
+            ),
+            google_analytics_credentials_file=(
+                analytics_credentials_file.resolve()
+                if analytics_credentials_file
+                else None
             ),
         )
 

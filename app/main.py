@@ -24,6 +24,7 @@ from .captcha import (
     TurnstileVerifier,
 )
 from .config import settings
+from .ga4 import Ga4ConfigurationError, Ga4QueryError, Ga4Reporter
 from .jobs import JobManager
 from .models import AdminLoginRequest, JobView, PrivacyEventRequest, SearchRequest
 from .privacy import PrivacyEventStore
@@ -63,6 +64,11 @@ admin_auth = AdminAuth(
     session_hours=settings.admin_session_hours,
 )
 admin_logs = AdminLogReader(settings.base_dir, settings.data_dir)
+ga4 = Ga4Reporter(
+    settings.google_analytics_property_id,
+    settings.google_analytics_credentials_file,
+    timeout_seconds=settings.http_timeout_seconds,
+)
 captcha = TurnstileVerifier(settings)
 
 
@@ -173,6 +179,7 @@ def health() -> dict[str, str | bool]:
         "captcha_required": settings.captcha_required,
         "captcha_configured": settings.captcha_configured,
         "google_analytics_configured": settings.google_analytics_configured,
+        "google_analytics_reporting_configured": ga4.configured,
     }
 
 
@@ -358,6 +365,67 @@ def admin_log_tail(
         "sources": admin_logs.available_sources(),
         "log": admin_logs.tail(source, lines),
     }
+
+
+@app.get("/api/admin/analytics", include_in_schema=False)
+def admin_analytics(
+    request: Request, days: int = 30, refresh: bool = False
+) -> dict:
+    _require_admin(request)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni.")
+    if not ga4.configured:
+        return {
+            "status": "setup_required",
+            "measurement_configured": settings.google_analytics_configured,
+            "message": (
+                "Za prikaz poročil dodajte numerični GA4 Property ID in "
+                "storitveni račun z dovoljenjem Viewer."
+            ),
+        }
+    try:
+        return {"status": "ready", **ga4.report(days, force_refresh=refresh)}
+    except Ga4ConfigurationError as exc:
+        logger.warning("GA4 reporting credentials are not usable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Dostop do Google Analytics še ni pravilno nastavljen.",
+        ) from exc
+    except Ga4QueryError as exc:
+        logger.warning("GA4 Data API query failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Google Analytics trenutno ni vrnil poročila.",
+        ) from exc
+
+
+@app.get("/api/admin/analytics.csv", include_in_schema=False)
+def admin_analytics_csv(request: Request, days: int = 30) -> Response:
+    _require_admin(request)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni.")
+    if not ga4.configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Dostop do poročil Google Analytics še ni nastavljen.",
+        )
+    try:
+        filename, content = ga4.export_csv(days)
+    except (Ga4ConfigurationError, Ga4QueryError) as exc:
+        logger.warning("GA4 CSV export failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Poročila Google Analytics trenutno ni mogoče prenesti.",
+        ) from exc
+    return Response(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.post("/api/privacy/events", status_code=status.HTTP_204_NO_CONTENT)

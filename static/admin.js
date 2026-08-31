@@ -9,6 +9,10 @@ const requestSummary = document.querySelector("#request-summary");
 const filters = document.querySelector("#request-filters");
 const download = document.querySelector("#statistics-download");
 const pageStatus = document.querySelector("#page-status");
+const analyticsPeriod = document.querySelector("#analytics-period");
+const analyticsMessage = document.querySelector("#analytics-message");
+const analyticsContent = document.querySelector("#analytics-content");
+const analyticsDownload = document.querySelector("#analytics-download");
 const PAGE_SIZE = 100;
 let captchaToken = null;
 let turnstileWidget = null;
@@ -41,6 +45,8 @@ function bindControls() {
   document.querySelector("#logs-refresh").addEventListener("click", loadLogs);
   document.querySelector("#log-source").addEventListener("change", loadLogs);
   document.querySelector("#log-lines").addEventListener("change", loadLogs);
+  document.querySelector("#analytics-refresh").addEventListener("click", () => loadAnalytics(true));
+  analyticsPeriod.addEventListener("change", () => loadAnalytics());
 }
 
 async function prepareLogin() {
@@ -161,8 +167,9 @@ async function logout() {
 function openTab(name) {
   document.querySelectorAll("[data-admin-tab]").forEach((button) => button.classList.toggle("is-active", button.dataset.adminTab === name));
   document.querySelectorAll("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== name; });
-  const titles = { overview: "Pregled uporabe", requests: "Zahteve za parcele", logs: "Dnevniki aplikacije" };
+  const titles = { overview: "Pregled uporabe", analytics: "Google Analytics", requests: "Zahteve za parcele", logs: "Dnevniki aplikacije" };
   document.querySelector("#admin-page-title").textContent = titles[name] || "Administracija";
+  if (name === "analytics") loadAnalytics();
   if (name === "requests") loadRequests();
   if (name === "logs") loadLogs();
 }
@@ -278,6 +285,149 @@ function tableRow(values) {
     row.append(cell);
   });
   return row;
+}
+
+async function loadAnalytics(forceRefresh = false) {
+  const days = Number(analyticsPeriod.value) || 30;
+  const refreshButton = document.querySelector("#analytics-refresh");
+  analyticsMessage.hidden = false;
+  analyticsMessage.className = "analytics-message";
+  analyticsMessage.textContent = "Nalagam Google Analytics …";
+  analyticsContent.hidden = true;
+  refreshButton.disabled = true;
+  analyticsDownload.href = `/api/admin/analytics.csv?days=${days}`;
+  const query = new URLSearchParams({ days: String(days) });
+  if (forceRefresh) query.set("refresh", "true");
+  const data = await api(`/api/admin/analytics?${query}`);
+  refreshButton.disabled = false;
+  if (!data) {
+    analyticsMessage.classList.add("is-error");
+    analyticsMessage.textContent = "Poročila trenutno ni mogoče naložiti.";
+    return;
+  }
+  if (data.status !== "ready") {
+    analyticsMessage.classList.add(data.status === "setup_required" ? "is-setup" : "is-error");
+    analyticsMessage.textContent = data.message || data.detail || "Google Analytics trenutno ni na voljo.";
+    return;
+  }
+
+  analyticsMessage.hidden = true;
+  analyticsContent.hidden = false;
+  renderAnalyticsSummary(data.summary || {});
+  renderAnalyticsDaily(data.daily || []);
+  renderAnalyticsTable(
+    "#analytics-channels",
+    data.channels,
+    (row) => [channelLabel(row.channel), formatNumber(row.sessions), formatNumber(row.total_users)],
+    3,
+  );
+  renderAnalyticsTable(
+    "#analytics-events",
+    data.events,
+    (row) => [eventLabel(row.event), formatNumber(row.event_count)],
+    2,
+  );
+  renderAnalyticsTable(
+    "#analytics-devices",
+    data.devices,
+    (row) => [analyticsDeviceLabel(row.device), formatNumber(row.total_users)],
+    2,
+  );
+  renderAnalyticsTable(
+    "#analytics-countries",
+    data.countries,
+    (row) => [row.country || "—", formatNumber(row.total_users)],
+    2,
+  );
+  document.querySelector("#analytics-generated").textContent = `Osveženo ${formatDate(data.generated_at)}`;
+}
+
+function renderAnalyticsSummary(values) {
+  const cards = [
+    [values.total_users, "Uporabniki"],
+    [values.new_users, "Novi uporabniki"],
+    [values.sessions, "Seje"],
+    [values.page_views, "Ogledi strani"],
+    [values.engaged_sessions, "Aktivne seje"],
+    [formatDuration(values.average_session_duration), "Povp. trajanje seje"],
+  ];
+  const container = document.querySelector("#analytics-summary");
+  container.replaceChildren(...cards.map(([value, label]) => {
+    const card = document.createElement("article");
+    const strong = document.createElement("strong");
+    const span = document.createElement("span");
+    strong.textContent = typeof value === "number" ? formatNumber(value) : value;
+    span.textContent = label;
+    card.append(strong, span);
+    return card;
+  }));
+}
+
+function renderAnalyticsDaily(rows) {
+  const container = document.querySelector("#analytics-daily");
+  container.replaceChildren();
+  if (!rows.length) {
+    container.textContent = "Za izbrano obdobje še ni podatkov.";
+    return;
+  }
+  const maximum = Math.max(1, ...rows.map((row) => Number(row.sessions) || 0));
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "analytics-bar-row";
+    const date = document.createElement("span");
+    const track = document.createElement("i");
+    const fill = document.createElement("b");
+    const value = document.createElement("strong");
+    date.textContent = formatAnalyticsDate(row.date);
+    fill.style.width = `${Math.max(2, ((Number(row.sessions) || 0) / maximum) * 100)}%`;
+    track.append(fill);
+    value.textContent = `${formatNumber(row.sessions)} sej · ${formatNumber(row.active_users)} uporabnikov`;
+    item.append(date, track, value);
+    container.append(item);
+  });
+}
+
+function renderAnalyticsTable(selector, rows, values, columns) {
+  const body = document.querySelector(selector);
+  body.replaceChildren();
+  if (!rows?.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = columns;
+    cell.textContent = "Podatkov še ni.";
+    row.append(cell);
+    body.append(row);
+    return;
+  }
+  rows.forEach((row) => body.append(tableRow(values(row))));
+}
+
+function channelLabel(value) {
+  return ({ Direct: "Neposredno", "Organic Search": "Organsko iskanje", Referral: "Povezave", "Organic Social": "Družbena omrežja", Unassigned: "Nedoločeno" })[value] || value || "—";
+}
+
+function eventLabel(value) {
+  return ({ parcel_analysis_started: "Začete analize", parcel_analysis_completed: "Končane analize", parcel_analysis_failed: "Neuspele analize", result_tab_opened: "Odprti zavihki rezultatov", location_report_downloaded: "Preneseni PDF-ji" })[value] || value || "—";
+}
+
+function analyticsDeviceLabel(value) {
+  return ({ desktop: "Namizni računalnik", mobile: "Telefon", tablet: "Tablica" })[value] || value || "—";
+}
+
+function formatAnalyticsDate(value) {
+  if (!/^\d{8}$/.test(value || "")) return value || "—";
+  const date = new Date(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T12:00:00`);
+  return new Intl.DateTimeFormat("sl-SI", { day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("sl-SI", { maximumFractionDigits: 1 }).format(Number(value) || 0);
+}
+
+function formatDuration(value) {
+  const seconds = Math.max(0, Math.round(Number(value) || 0));
+  const minutes = Math.floor(seconds / 60);
+  return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
 }
 
 async function loadLogs() {
