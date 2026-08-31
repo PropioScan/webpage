@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from lxml import html
 
@@ -114,7 +115,7 @@ def test_analysis_requires_a_user_triggered_turnstile_check():
 def test_propioscan_brand_and_legal_footer_are_present():
     page = _page()
 
-    assert page.xpath("//title[text()='Propioscan — pameten pregled nepremičnine']")
+    assert page.xpath("//title[text()='Pregled parcele in prostorski akti | Propioscan']")
     assert page.xpath("//link[@rel='canonical' and @href='https://propioscan.com/']")
     assert page.xpath("//img[@src='/static/propioscan-mark.png']")
     assert "Propioscan" in page.text_content()
@@ -125,6 +126,36 @@ def test_propioscan_brand_and_legal_footer_are_present():
     assert "Vse pravice pridržane" in footer_text
     assert "CC BY 4.0" in footer_text
     assert "rezultati so informativni" in footer_text
+
+
+def test_homepage_has_complete_search_and_social_metadata():
+    page = _page()
+
+    assert page.xpath("//meta[@name='description' and contains(@content, 'GURS in PIS')]")
+    assert page.xpath("//meta[@name='robots' and contains(@content, 'index, follow')]")
+    assert page.xpath("//meta[@property='og:locale' and @content='sl_SI']")
+    assert page.xpath("//meta[@property='og:image' and starts-with(@content, 'https://propioscan.com/')]")
+    assert page.xpath("//meta[@name='twitter:card' and @content='summary_large_image']")
+    assert page.xpath("//link[@rel='alternate' and @hreflang='sl-SI']")
+    assert page.xpath("//h1[contains(normalize-space(.), 'Pregled parcele')]")
+
+
+def test_homepage_structured_data_matches_visible_service():
+    page = _page()
+    scripts = page.xpath("//script[@type='application/ld+json']/text()")
+
+    assert len(scripts) == 1
+    data = json.loads(scripts[0])
+    types = {entry["@type"] for entry in data["@graph"]}
+    assert types == {"Organization", "WebSite", "SoftwareApplication"}
+    application = next(entry for entry in data["@graph"] if entry["@type"] == "SoftwareApplication")
+    assert application["offers"] == {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}
+    assert application["operatingSystem"] == "Any"
+
+    overview = page.xpath("//*[contains(concat(' ', normalize-space(@class), ' '), ' seo-overview ')]")[0]
+    overview_text = " ".join(overview.text_content().split())
+    for phrase in ("Namenska raba", "prostorski akti", "Infrastruktura", "omejitve", "PDF izpis"):
+        assert phrase in overview_text
 
 
 def test_desktop_utility_bar_has_no_source_status_or_developer_metrics():

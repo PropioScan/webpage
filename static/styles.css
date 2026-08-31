@@ -875,6 +875,21 @@ footer { padding: 26px 36px; font-size: 10px; }
 .technical-badge { color: #ffba82; border-color: rgba(244, 122, 36, .28); background: rgba(244, 122, 36, .12); }
 .compact-section { border-color: #d8e3e9; background: rgba(255, 255, 255, .72); }
 
+.seo-overview {
+  padding: 62px clamp(28px, 6vw, 92px);
+  color: var(--ink);
+  background: linear-gradient(180deg, #f8fafc, #eef4f7);
+}
+.seo-overview-intro { max-width: 820px; }
+.seo-overview-intro > span { color: var(--orange); font-size: 10px; font-weight: 850; letter-spacing: 1.05px; text-transform: uppercase; }
+.seo-overview h2 { margin: 8px 0 12px; color: var(--navy); font: 800 clamp(27px, 3vw, 38px)/1.12 "Manrope", sans-serif; letter-spacing: -1.3px; }
+.seo-overview-intro p { margin: 0; color: #526579; font-size: 14px; line-height: 1.75; }
+.seo-feature-grid { margin-top: 30px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.seo-feature-grid article { padding: 22px; border: 1px solid #d8e3e9; border-radius: 13px; background: rgba(255, 255, 255, .82); box-shadow: 0 10px 28px rgba(23, 50, 75, .05); }
+.seo-feature-grid h3 { margin: 0 0 9px; color: var(--navy); font: 800 14px/1.35 "Manrope", sans-serif; }
+.seo-feature-grid p { margin: 0; color: #607285; font-size: 11px; line-height: 1.65; }
+.seo-overview-note { margin: 20px 0 0; color: #718296; font-size: 10px; line-height: 1.6; }
+
 .site-footer {
   position: relative;
   padding: 0;
@@ -907,6 +922,7 @@ footer { padding: 26px 36px; font-size: 10px; }
 .footer-legal strong { color: #a8bac8; }
 
 @media (max-width: 1180px) {
+  .seo-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-main { grid-template-columns: 1.3fr 1fr 1fr; }
   .footer-company { grid-column: 1 / -1; padding-top: 25px; border-top: 1px solid rgba(255, 255, 255, .08); }
 }
@@ -928,6 +944,9 @@ footer { padding: 26px 36px; font-size: 10px; }
   .hero-content { overflow: visible; }
   .hero-trust { margin-bottom: 21px; gap: 6px; }
   .hero-trust span { padding: 5px 8px; font-size: 9px; }
+  .seo-overview { padding: 45px 22px; }
+  .seo-feature-grid { grid-template-columns: 1fr; gap: 10px; }
+  .seo-feature-grid article { padding: 19px; }
   .footer-main { padding: 42px 22px 34px; grid-template-columns: 1fr; gap: 30px; }
   .footer-company { grid-column: auto; padding-top: 25px; }
   .footer-legal { padding: 22px; grid-template-columns: 1fr; gap: 13px; }

@@ -103,6 +103,8 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 @app.middleware("http")
 async def admin_security_headers(request: Request, call_next):
     response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
     if request.url.path == "/admin" or request.url.path.startswith("/api/admin/"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Frame-Options"] = "DENY"
@@ -122,6 +124,36 @@ async def admin_security_headers(request: Request, call_next):
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots() -> Response:
+    return Response(
+        content=(
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin\n"
+            "Disallow: /api/\n"
+            "Sitemap: https://propioscan.com/sitemap.xml\n"
+        ),
+        media_type="text/plain",
+    )
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap() -> Response:
+    return Response(
+        content=(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            "  <url>\n"
+            "    <loc>https://propioscan.com/</loc>\n"
+            "    <lastmod>2026-08-31</lastmod>\n"
+            "  </url>\n"
+            "</urlset>\n"
+        ),
+        media_type="application/xml",
+    )
 
 
 @app.get("/admin", include_in_schema=False)
