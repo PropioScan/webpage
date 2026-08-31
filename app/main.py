@@ -140,6 +140,7 @@ def health() -> dict[str, str | bool]:
         "ai_model": settings.openai_model,
         "captcha_required": settings.captcha_required,
         "captcha_configured": settings.captcha_configured,
+        "google_analytics_configured": settings.google_analytics_configured,
     }
 
 
@@ -150,6 +151,11 @@ def public_config() -> dict[str, str | bool | None]:
         "captcha_configured": settings.captcha_configured,
         "turnstile_site_key": (
             settings.turnstile_site_key if settings.captcha_configured else None
+        ),
+        "google_analytics_measurement_id": (
+            settings.google_analytics_measurement_id
+            if settings.google_analytics_configured
+            else None
         ),
     }
 
@@ -408,7 +414,7 @@ def start_search(
         ) from exc
     parcel_reference = search_request.parcel_number.strip()
     analytics_consent = bool(
-        search_request.analytics_consent and search_request.consent_version == "1.1"
+        search_request.analytics_consent and search_request.consent_version == "1.2"
     )
     visitor_id = _visitor_id(propioscan_visitor_id) if analytics_consent else None
     job = jobs.submit(parcel_reference)

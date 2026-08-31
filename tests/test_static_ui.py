@@ -155,8 +155,20 @@ def test_cookie_controls_are_consent_first_and_reopenable():
     assert 'if (!privacyConsent?.analytics) return;' in script
     assert 'window.localStorage.removeItem(RECENT_SEARCHES_KEY)' in script
     assert 'fetch("/api/privacy/events"' in script
-    assert 'const CONSENT_VERSION = "1.1"' in script
+    assert 'const CONSENT_VERSION = "1.2"' in script
     assert "analytics_consent: Boolean(privacyConsent?.analytics)" in script
+    assert "if (!privacyConsent?.analytics) return false;" in script
+    assert "https://www.googletagmanager.com/gtag/js?id=" in script
+    assert 'analytics_storage: "denied"' in script
+    assert 'ad_storage: "denied"' in script
+    assert 'ad_user_data: "denied"' in script
+    assert 'ad_personalization: "denied"' in script
+    assert "allow_google_signals: false" in script
+    assert "allow_ad_personalization_signals: false" in script
+    assert "parcel_analysis_completed" in script
+    assert "location_report_downloaded" in script
+    assert "parcel_reference" not in script[script.index("function recordGoogleEvent"):script.index("function analysisDurationParameters")]
+    assert "googletagmanager.com" not in source
 
 
 def test_privacy_notice_covers_core_disclosures():
@@ -175,6 +187,10 @@ def test_privacy_notice_covers_core_disclosures():
         "operativni zapisi zahtev z IP-jem",
         "tehnično oznako skupine",
         "nista potrjena identiteta osebe",
+        "Google Analytics 4",
+        "Google tag se pred soglasjem ne naloži",
+        "Google Signals",
+        "parcelne oznake, ID-ja opravila",
     ):
         assert required_text in policy_text
 

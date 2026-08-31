@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="/static/propioscan-mark.png">
     <title>Propioscan — pameten pregled nepremičnine</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=3" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -316,7 +316,7 @@
       <div class="cookie-banner-icon" aria-hidden="true">◔</div>
       <div class="cookie-banner-copy">
         <strong>Vaša zasebnost, vaša izbira</strong>
-        <p>Propioscan uporablja nujni piškotek za shranjevanje vaše izbire. Ob oddaji analize zaradi izvedbe in varnosti storitve največ 30 dni hranimo parcelno oznako, čas, IP ter podatke o brskalniku in napravi. Z dovoljenjem lahko shranimo tudi nedavna iskanja in psevdonimni ID obiskovalca. Ne uporabljamo oglaševalskih piškotkov.</p>
+        <p>Propioscan uporablja nujni piškotek za shranjevanje vaše izbire. Ob oddaji analize zaradi izvedbe in varnosti storitve največ 30 dni hranimo parcelno oznako, čas, IP ter podatke o brskalniku in napravi. Z dovoljenjem lahko shranimo tudi nedavna iskanja ter vključimo lastno analitiko in Google Analytics 4. Ne uporabljamo oglaševalskih piškotkov.</p>
         <button type="button" data-privacy-open>Preberite politiko zasebnosti</button>
       </div>
       <div class="cookie-banner-actions">
@@ -346,7 +346,7 @@
         </label>
         <label class="privacy-choice">
           <input id="cookie-analytics" type="checkbox">
-          <span><strong>Psevdonimna analitika</strong><small>Strežnik za največ 90 dni shrani naključni ID brskalnika, čas in iskano parcelno oznako. Ločeni operativni zapis zahteve vsebuje tudi IP in tehnične podatke ter se hrani največ 30 dni ne glede na to izbiro. Ob izklopu izbrišemo analitični ID in povezavo z njim.</small></span>
+          <span><strong>Analitika uporabe</strong><small>Po soglasju vključimo lastno psevdonimno analitiko in Google Analytics 4 za oglede ter varne dogodke uporabe. Googlu ne pošiljamo parcelne oznake ali ID-ja opravila; oglaševanje, Google Signals in personalizacija ostanejo izključeni. Ločeni operativni zapis zahteve se hrani največ 30 dni ne glede na to izbiro.</small></span>
           <b>Izbirno</b>
         </label>
       </div>
@@ -360,6 +360,7 @@
               <tr><td><code>propioscan_cookie_consent</code></td><td>Nujni piškotek</td><td>Izbrane kategorije in različica soglasja</td><td>180 dni</td></tr>
               <tr><td><code>propioscan_recent_searches</code></td><td>Lokalna shramba</td><td>Največ 10 nedavnih parcelnih poizvedb</td><td>30 dni</td></tr>
               <tr><td><code>propioscan_visitor_id</code></td><td>Analitični piškotek, HttpOnly</td><td>Naključni psevdonimni ID za povezavo dovoljenih iskalnih dogodkov</td><td>90 dni</td></tr>
+              <tr><td><code>_ga</code>, <code>_ga_*</code></td><td>Google Analytics 4</td><td>Razlikovanje dovoljenih obiskov in sej; nastavita se šele po soglasju</td><td>Največ 90 dni</td></tr>
               <tr><td><code>propioscan_admin_session</code></td><td>Nujni skrbniški piškotek, HttpOnly</td><td>Zaščitena prijava v skrbniško ploščo; javnim obiskovalcem se ne nastavi</td><td>8 ur oziroma do odjave</td></tr>
             </tbody>
           </table>
@@ -375,7 +376,7 @@
 
     <dialog id="privacy-dialog" class="privacy-dialog privacy-policy-dialog" aria-labelledby="privacy-dialog-title">
       <div class="privacy-dialog-head">
-        <div><span>Različica 1.1 · 31. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
+        <div><span>Različica 1.2 · 31. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
         <button class="dialog-close" type="button" data-privacy-close aria-label="Zapri politiko zasebnosti">×</button>
       </div>
 
@@ -388,7 +389,7 @@
           <h3>2. Katere podatke obdelujemo</h3>
           <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani.</p>
           <p>Za skrbniški pregled lahko iz IP-ja in uporabniškega agenta izračunamo kratko tehnično oznako skupine <code>T-*</code>. To je le približek: več oseb lahko uporablja isto oznako, ista oseba pa lahko uporablja več oznak. Oznake ne uporabljamo za avtomatizirano odločanje ali oglaševanje.</p>
-          <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve.</p>
+          <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve. Šele po istem soglasju se lahko naloži Google Analytics 4, ki prejme podatke o ogledu strani, približni državi, napravi, brskalniku, napotitvi in nadzorovanih dogodkih, kot so začetek ali zaključek analize, odprt rezultatni zavihek in prenos poročila. V dogodke za Google ne vključimo parcelne oznake, ID-ja opravila, vsebine dokumentov ali besedila napake.</p>
           <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
           <p>Ne zbiramo imena ali e-pošte obiskovalca in ne ustvarjamo oglaševalskega profila. Naključni analitični ID in tehnična oznaka označujeta brskalnik oziroma tehnično okolje in nista potrjena identiteta osebe.</p>
         </section>
@@ -397,12 +398,13 @@
           <ul>
             <li><strong>Izvedba zahtevane analize in operativna evidenca:</strong> odgovor na vašo zahtevo ter zakoniti interes zagotavljanja delujoče in varne storitve, odpravljanja napak, preprečevanja zlorab in merjenja zanesljivosti.</li>
             <li><strong>Nedavna iskanja:</strong> vaše soglasje; funkcijo lahko zavrnete ali kadar koli izključite.</li>
-            <li><strong>Psevdonimna analitika:</strong> vaše soglasje; uporablja se za razumevanje uporabe in izboljšanje storitve.</li>
+            <li><strong>Analitika uporabe:</strong> vaše soglasje; lastna psevdonimna analitika in Google Analytics 4 se uporabljata za razumevanje uporabe, zanesljivosti in izboljšanje storitve. Google tag se pred soglasjem ne naloži.</li>
           </ul>
         </section>
         <section>
           <h3>4. Viri, prejemniki in prenosi</h3>
-          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo. Ponudniki lahko podatke obdelujejo zunaj EGP na podlagi veljavnih pogodbenih in drugih ustreznih zaščit.</p>
+          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo.</p>
+          <p>Po soglasju za analitiko je prejemnik podatkov tudi Google Analytics. Google lahko pri omrežni zahtevi prejme IP naslov ter podatke o strani, napotitvi, času, brskalniku in napravi; oglaševalski signali, Google Signals, personalizacija in povezovanje z Google Ads so v naši izvedbi izključeni. Ponudniki lahko podatke obdelujejo zunaj EGP na podlagi veljavnih pogodbenih in drugih ustreznih zaščit.</p>
           <p>Propioscan podatkov ne prodaja in ne uporablja oglaševalskih ali profilirnih piškotkov.</p>
         </section>
         <section>
@@ -411,6 +413,7 @@
             <li>izbira piškotkov: 180 dni;</li>
             <li>nedavna iskanja v vašem brskalniku: 30 dni oziroma do preklica;</li>
             <li>psevdonimni ID in dovoljeni analitični dogodki: največ 90 dni;</li>
+            <li>analitična piškotka Google Analytics 4: največ 90 dni; dogodkovni podatki v storitvi Google Analytics največ 2 meseca;</li>
             <li>operativni zapisi zahtev z IP-jem in tehničnimi podatki: največ 30 dni;</li>
             <li>rezultati zaključenega ali neuspelega opravila: največ 30 dni;</li>
             <li>neuspešni poskusi skrbniške prijave: največ 24 ur;</li>
@@ -420,7 +423,7 @@
         </section>
         <section>
           <h3>6. Vaše pravice</h3>
-          <p>Glede na pogoje GDPR lahko zahtevate dostop, popravek, izbris, omejitev obdelave, prenosljivost in ugovarjate obdelavi. Soglasje lahko kadar koli prekličete v nastavitvah piškotkov. Pritožbo lahko vložite pri <a href="https://www.ip-rs.si/" target="_blank" rel="noopener noreferrer">Informacijskem pooblaščencu Republike Slovenije <span>↗</span></a>.</p>
+          <p>Glede na pogoje GDPR lahko zahtevate dostop, popravek, izbris, omejitev obdelave, prenosljivost in ugovarjate obdelavi. Soglasje lahko kadar koli prekličete v nastavitvah piškotkov; s tem ustavimo prihodnje Google meritve in izbrišemo analitične piškotke v brskalniku, prej zbrani podatki pa se izbrišejo po navedenem roku hrambe. Pritožbo lahko vložite pri <a href="https://www.ip-rs.si/" target="_blank" rel="noopener noreferrer">Informacijskem pooblaščencu Republike Slovenije <span>↗</span></a>.</p>
         </section>
         <section>
           <h3>7. Avtomatizirana razlaga</h3>

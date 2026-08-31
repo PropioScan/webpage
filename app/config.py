@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,10 +59,20 @@ class Settings:
     admin_password_hash: str | None = None
     admin_session_secret: str | None = None
     admin_session_hours: int = 8
+    google_analytics_measurement_id: str | None = None
 
     @property
     def captcha_configured(self) -> bool:
         return bool(self.turnstile_site_key and self.turnstile_secret_key)
+
+    @property
+    def google_analytics_configured(self) -> bool:
+        return bool(
+            self.google_analytics_measurement_id
+            and re.fullmatch(
+                r"G-[A-Z0-9]{6,20}", self.google_analytics_measurement_id
+            )
+        )
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -100,6 +111,10 @@ class Settings:
             admin_password_hash=os.getenv("ADMIN_PASSWORD_HASH") or None,
             admin_session_secret=os.getenv("ADMIN_SESSION_SECRET") or None,
             admin_session_hours=max(1, _int("ADMIN_SESSION_HOURS", 8)),
+            google_analytics_measurement_id=(
+                os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "").strip().upper()
+                or None
+            ),
         )
 
     def ensure_directories(self) -> None:

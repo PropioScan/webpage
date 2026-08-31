@@ -22,7 +22,7 @@ def _record(store, request_id, job_id, parcel, ip, now, visitor_id=None):
         accept_language="sl-SI,sl;q=0.9",
         referer="https://propioscan.com/start?secret=no",
         analytics_consent=visitor_id is not None,
-        consent_version="1.1" if visitor_id else None,
+        consent_version="1.2" if visitor_id else None,
         now=now,
     )
 

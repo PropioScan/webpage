@@ -25,18 +25,29 @@ const reportDownload = document.querySelector("#report-download");
 const reportDownloadLabel = document.querySelector("#report-download-label");
 const reportDownloadStatus = document.querySelector("#report-download-status");
 
-const CONSENT_VERSION = "1.1";
+const CONSENT_VERSION = "1.2";
 const CONSENT_COOKIE = "propioscan_cookie_consent";
 const RECENT_SEARCHES_KEY = "propioscan_recent_searches";
 const CONSENT_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
 const RECENT_SEARCH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const GOOGLE_COOKIE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
+const GOOGLE_EVENT_NAMES = new Set([
+  "parcel_analysis_started",
+  "parcel_analysis_completed",
+  "parcel_analysis_failed",
+  "location_report_downloaded",
+  "result_tab_opened",
+]);
 let privacyConsent = readPrivacyConsent();
 let publicConfigPromise;
 let turnstileScriptPromise;
+let googleAnalyticsPromise;
+let googleMeasurementId = null;
 let turnstileWidgetId = null;
 let captchaAwaiting = false;
 let captchaVerifiedToken = null;
 let searchStarting = false;
+let analysisStartedAt = null;
 
 initializePrivacyControls();
 
@@ -86,6 +97,9 @@ function activateResultTab(name) {
   document.querySelectorAll("[data-result-panel]").forEach((panel) => {
     panel.hidden = panel !== selectedPanel;
   });
+  if (!resultsSection.hidden) {
+    recordGoogleEvent("result_tab_opened", { tab_name: name });
+  }
 }
 
 const element = (tag, className, text) => {
@@ -165,8 +179,14 @@ async function beginParcelSearch(parcelReference, captchaToken) {
     rememberRecentSearch(parcelReference);
     recordSearchEvent(parcelReference);
     const job = await response.json();
+    analysisStartedAt = Date.now();
+    recordGoogleEvent("parcel_analysis_started");
     await pollJob(job.id);
   } catch (error) {
+    if (analysisStartedAt !== null) {
+      recordGoogleEvent("parcel_analysis_failed", analysisDurationParameters());
+      analysisStartedAt = null;
+    }
     showError(error.message || "Analize ni bilo mogoče začeti.");
   } finally {
     searchStarting = false;
@@ -187,6 +207,106 @@ async function getPublicConfig() {
     });
   }
   return publicConfigPromise;
+}
+
+function googleConsentState(granted) {
+  if (!window.gtag) return;
+  window.gtag("consent", "update", {
+    analytics_storage: granted ? "granted" : "denied",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+}
+
+async function enableGoogleAnalytics() {
+  if (!privacyConsent?.analytics) return false;
+  if (googleMeasurementId && window.gtag) {
+    window[`ga-disable-${googleMeasurementId}`] = false;
+    googleConsentState(true);
+    return true;
+  }
+  if (googleAnalyticsPromise) return googleAnalyticsPromise;
+
+  googleAnalyticsPromise = (async () => {
+    const config = await getPublicConfig();
+    const measurementId = config.google_analytics_measurement_id;
+    if (!/^G-[A-Z0-9]{6,20}$/.test(measurementId || "")) return false;
+
+    googleMeasurementId = measurementId;
+    window[`ga-disable-${measurementId}`] = false;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
+    window.gtag("consent", "default", {
+      analytics_storage: "denied",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+      ads_data_redaction: true,
+      wait_for_update: 500,
+    });
+    googleConsentState(true);
+    window.gtag("js", new Date());
+    window.gtag("config", measurementId, {
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+      anonymize_ip: true,
+      cookie_expires: GOOGLE_COOKIE_MAX_AGE_SECONDS,
+      cookie_update: false,
+      send_page_view: true,
+    });
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+    await new Promise((resolve, reject) => {
+      script.addEventListener("load", resolve, { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.head.append(script);
+    });
+    if (!privacyConsent?.analytics) {
+      disableGoogleAnalytics();
+      return false;
+    }
+    return true;
+  })().catch(() => {
+    googleAnalyticsPromise = undefined;
+    return false;
+  });
+  return googleAnalyticsPromise;
+}
+
+function disableGoogleAnalytics() {
+  if (googleMeasurementId) window[`ga-disable-${googleMeasurementId}`] = true;
+  googleConsentState(false);
+  document.cookie.split("; ").forEach((entry) => {
+    const name = entry.split("=", 1)[0];
+    if (!name.startsWith("_ga")) return;
+    const domains = ["", window.location.hostname, `.${window.location.hostname}`];
+    domains.forEach((domain) => {
+      const domainPart = domain ? `; Domain=${domain}` : "";
+      document.cookie = `${name}=; Max-Age=0; Path=/${domainPart}; SameSite=Lax; Secure`;
+    });
+  });
+}
+
+function recordGoogleEvent(name, parameters = {}) {
+  if (!privacyConsent?.analytics || !GOOGLE_EVENT_NAMES.has(name)) return;
+  const safeParameters = {};
+  if (["overview", "report", "technical", "acts"].includes(parameters.tab_name)) {
+    safeParameters.tab_name = parameters.tab_name;
+  }
+  if (Number.isFinite(parameters.duration_seconds)) {
+    safeParameters.duration_seconds = Math.max(0, Math.min(3600, Math.round(parameters.duration_seconds)));
+  }
+  enableGoogleAnalytics().then((enabled) => {
+    if (enabled && privacyConsent?.analytics) window.gtag("event", name, safeParameters);
+  });
+}
+
+function analysisDurationParameters() {
+  if (analysisStartedAt === null) return {};
+  return { duration_seconds: (Date.now() - analysisStartedAt) / 1000 };
 }
 
 async function showCaptcha(siteKey) {
@@ -279,6 +399,8 @@ async function pollJob(jobId) {
     if (job.status === "completed") {
       statusPanel.hidden = true;
       renderResult(job.result, job.id);
+      recordGoogleEvent("parcel_analysis_completed", analysisDurationParameters());
+      analysisStartedAt = null;
       return;
     }
     if (job.status === "failed") throw new Error(job.error || "Analiza ni uspela.");
@@ -514,6 +636,7 @@ function formatReportDate(value) {
 
 async function downloadLocationReport(event) {
   event.preventDefault();
+  event.stopPropagation();
   if (reportDownload.getAttribute("aria-disabled") === "true" || reportDownload.getAttribute("aria-busy") === "true") return;
 
   const reportUrl = reportDownload.href;
@@ -546,6 +669,7 @@ async function downloadLocationReport(event) {
 
     reportDownloadStatus.classList.add("is-success");
     reportDownloadStatus.textContent = "PDF z izpolnjenimi podatki je pripravljen in se prenaša.";
+    recordGoogleEvent("location_report_downloaded");
   } catch (error) {
     reportDownloadStatus.classList.add("is-error");
     reportDownloadStatus.textContent = error.message || "PDF-ja ni bilo mogoče prenesti. Poskusite znova.";
@@ -1222,6 +1346,7 @@ function savePrivacyConsent(selection) {
   }
   if (previousAnalytics && !privacyConsent.analytics) {
     forgetAnalyticsVisitor();
+    disableGoogleAnalytics();
   }
 
   applyStoredConsent();
@@ -1233,6 +1358,8 @@ function applyStoredConsent() {
   functionalConsentInput.checked = Boolean(privacyConsent?.functional);
   analyticsConsentInput.checked = Boolean(privacyConsent?.analytics);
   renderRecentSearches();
+  if (privacyConsent?.analytics) enableGoogleAnalytics();
+  else disableGoogleAnalytics();
 }
 
 function readPrivacyConsent() {

@@ -140,6 +140,26 @@ available.
   default). The necessary HttpOnly admin-session cookie is set only after a
   successful admin login and lasts no more than eight hours.
 
+## Google Analytics 4
+
+GA4 is optional and disabled while `GOOGLE_ANALYTICS_MEASUREMENT_ID` is blank.
+When configured, the integration uses Basic Consent Mode: the Google tag is not
+requested or executed until the visitor grants the existing analytics consent.
+Advertising storage, Ads user data, personalization, and Google Signals remain
+disabled in code.
+
+```dotenv
+GOOGLE_ANALYTICS_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+Only allowlisted events are sent: analysis started, completed or failed,
+result-tab opened, and location-report downloaded. The events never contain the
+parcel reference, cadastral municipality, job ID, document contents, or error
+text. Before activation, configure the GA4 property with event-data retention of
+two months, disable all Enhanced Measurement events except page views, do not
+link Google Ads, and keep Google Signals disabled. The public privacy notice and
+consent version already cover this restricted configuration.
+
 Before a public launch, replace the generic controller details in the privacy
 notice with the registered company name, address, registration/VAT details,
 and confirmed processor/DPA information. The implementation is a technical
