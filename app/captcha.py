@@ -68,6 +68,8 @@ class TurnstileVerifier:
         token: str | None,
         remote_ip: str | None,
         request_hostname: str | None = None,
+        *,
+        expected_action: str = TURNSTILE_ACTION,
     ) -> None:
         if not self.settings.captcha_required:
             return
@@ -104,6 +106,6 @@ class TurnstileVerifier:
             raise CaptchaRejectedError("Turnstile rejected the token.")
 
         action = result.get("action")
-        if action and action != TURNSTILE_ACTION:
+        if action and action != expected_action:
             logger.info("Turnstile returned an unexpected action: %s", action)
             raise CaptchaRejectedError("Turnstile action did not match.")

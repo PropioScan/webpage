@@ -7,7 +7,7 @@ import sys
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .errors import CheckerError
@@ -28,6 +28,7 @@ class JobManager:
         execution_mode: str = "thread",
         base_dir: Path | None = None,
         python_executable: str | None = None,
+        retention_days: int = 30,
     ) -> None:
         self.service = service
         self.executor = ThreadPoolExecutor(
@@ -40,12 +41,14 @@ class JobManager:
         self.execution_mode = execution_mode
         self.base_dir = base_dir or Path.cwd()
         self.python_executable = python_executable
+        self.retention = timedelta(days=max(1, retention_days))
         if self._jobs_dir is not None:
             self._jobs_dir.mkdir(parents=True, exist_ok=True)
         if self._worker_log is not None:
             self._worker_log.parent.mkdir(parents=True, exist_ok=True)
 
     def submit(self, parcel_number: str) -> JobView:
+        self.purge_expired()
         now = datetime.now(timezone.utc)
         job = JobView(
             id=uuid.uuid4().hex,
@@ -64,6 +67,27 @@ class JobManager:
         else:
             self.executor.submit(self._run, job.id, parcel_number)
         return job.model_copy(deep=True)
+
+    def purge_expired(self, now: datetime | None = None) -> int:
+        """Remove completed or failed disk-backed results after the retention limit."""
+
+        if self._jobs_dir is None:
+            return 0
+        cutoff = (now or datetime.now(timezone.utc)) - self.retention
+        removed = 0
+        for path in self._jobs_dir.glob("*.json"):
+            try:
+                job = JobView.model_validate_json(path.read_text(encoding="utf-8"))
+                expired = job.created_at < cutoff
+                finished = job.status in {JobStatus.completed, JobStatus.failed}
+                if expired and finished:
+                    path.unlink()
+                    with self._lock:
+                        self._jobs.pop(job.id, None)
+                    removed += 1
+            except (OSError, ValueError):
+                continue
+        return removed
 
     def run_persisted(self, job_id: str) -> JobView | None:
         """Run one queued disk-backed job in the current process."""

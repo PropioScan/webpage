@@ -51,6 +51,13 @@ class Settings:
     turnstile_secret_key: str | None = None
     job_execution_mode: str = "thread"
     job_python_executable: str | None = None
+    job_retention_days: int = 30
+    traffic_retention_days: int = 30
+    traffic_group_secret: str = ""
+    admin_username: str | None = None
+    admin_password_hash: str | None = None
+    admin_session_secret: str | None = None
+    admin_session_hours: int = 8
 
     @property
     def captcha_configured(self) -> bool:
@@ -74,6 +81,7 @@ class Settings:
             search_workers=max(1, _int("SEARCH_WORKERS", 2)),
             job_execution_mode=job_execution_mode,
             job_python_executable=os.getenv("JOB_PYTHON_EXECUTABLE") or None,
+            job_retention_days=max(1, _int("JOB_RETENTION_DAYS", 30)),
             http_timeout_seconds=max(5.0, _float("HTTP_TIMEOUT_SECONDS", 60.0)),
             max_archive_bytes=max(1, _int("MAX_ARCHIVE_MB", 500)) * 1024 * 1024,
             max_pdf_bytes=max(1, _int("MAX_PDF_MB", 500)) * 1024 * 1024,
@@ -86,6 +94,12 @@ class Settings:
             captcha_required=_bool("CAPTCHA_REQUIRED", True),
             turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY") or None,
             turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY") or None,
+            traffic_retention_days=max(1, _int("TRAFFIC_RETENTION_DAYS", 30)),
+            traffic_group_secret=os.getenv("TRAFFIC_GROUP_SECRET", ""),
+            admin_username=os.getenv("ADMIN_USERNAME") or None,
+            admin_password_hash=os.getenv("ADMIN_PASSWORD_HASH") or None,
+            admin_session_secret=os.getenv("ADMIN_SESSION_SECRET") or None,
+            admin_session_hours=max(1, _int("ADMIN_SESSION_HOURS", 8)),
         )
 
     def ensure_directories(self) -> None:
@@ -98,6 +112,7 @@ class Settings:
             self.data_dir / "privacy",
             self.data_dir / "jobs",
             self.data_dir / "logs",
+            self.data_dir / "traffic",
         ):
             path.mkdir(parents=True, exist_ok=True)
 

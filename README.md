@@ -50,6 +50,10 @@ The application uses the public [GURS WFS services](https://www.e-prostor.gov.si
   that cannot be established from the checked sources are explicitly marked for
   municipal confirmation; the file is never presented as an official document.
 - File-size limits, fixed official hosts, safe ZIP handling, generated local filenames, and constrained PDF-serving routes.
+- A protected `/admin` panel with Turnstile-checked login, rate limiting,
+  eight-hour signed sessions, parcel-request filters, approximate visitor
+  grouping, CSV export for active filters/grouping, and redacted application
+  logs. Raw credentials are never stored in the request database.
 
 ## Run locally
 
@@ -92,15 +96,20 @@ data/
 ├── archives/       # one source ZIP per PIS procedure
 ├── pdfs/<act-id>/  # extracted PDFs and cache manifest
 ├── ocr/            # optional OCR-enhanced PDFs
-└── map_previews/   # cached PNG previews of matching official map sheets
+├── map_previews/   # cached PNG previews of matching official map sheets
+├── jobs/           # disk-backed analysis results, retained for 30 days
+├── privacy/        # consent-gated pseudonymous analytics events
+├── traffic/        # bounded request and login-audit database
+└── logs/           # detached analysis-worker log
 ```
 
 Repeat searches reuse the manifest and downloaded PDFs. Delete a specific act directory and its matching ZIP when you intentionally want a fresh copy. Archive and PDF limits are controlled by `MAX_ARCHIVE_MB` and `MAX_PDF_MB`.
 
 ## Privacy and cookies
 
-Propioscan is consent-first. Before a visitor makes a choice, the application
-does not set optional cookies or write analytics events. The interface offers
+Propioscan is consent-first for optional storage. Before a visitor makes a
+choice, the application does not set optional cookies or write consent-gated
+analytics events. The interface offers
 equally accessible `Samo nujni`, granular settings, and `Sprejmi vse` actions,
 and the footer keeps cookie settings and the privacy notice permanently
 available.
@@ -113,6 +122,12 @@ available.
   version, and a random pseudonymous browser ID to
   `data/privacy/events.jsonl`. It does not add a name, email, IP address, user
   agent, or document contents to that record.
+- When a visitor submits an analysis, a separate operational record stores the
+  parcel reference, job/status, timestamp, IP, user agent, derived device,
+  browser/OS family, language and referring host for security, reliability and
+  diagnostics. These records are deleted after `TRAFFIC_RETENTION_DAYS` (30 by
+  default). A keyed technical `T-*` group derived from IP and user agent is an
+  approximation, not a verified person.
 - The analytics visitor cookie is HttpOnly, SameSite=Lax, and Secure on HTTPS.
   Events are purged after `PRIVACY_RETENTION_DAYS` (90 by default). Withdrawing
   analytics consent deletes the cookie and its associated events immediately.
@@ -121,11 +136,34 @@ available.
 - Generated location-information PDFs are returned directly to the requesting
   browser, are not persisted as user reports, and are not added to the analytics
   event log.
+- Completed and failed job results are deleted after `JOB_RETENTION_DAYS` (30 by
+  default). The necessary HttpOnly admin-session cookie is set only after a
+  successful admin login and lasts no more than eight hours.
 
 Before a public launch, replace the generic controller details in the privacy
 notice with the registered company name, address, registration/VAT details,
 and confirmed processor/DPA information. The implementation is a technical
 baseline, not legal advice.
+
+## Admin panel
+
+The panel is available at `/admin`. Production requires four private values:
+`ADMIN_USERNAME`, a scrypt `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`, and
+`TRAFFIC_GROUP_SECRET`. Keep them only in the server's private `.env`; the
+example file deliberately contains blanks.
+
+Generate a hash and random secrets locally without putting a plaintext password
+in source control:
+
+```bash
+python -c 'import getpass; from app.admin import hash_password; print(hash_password(getpass.getpass("Admin password: ")))'
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+```
+
+Use the first random value as `ADMIN_SESSION_SECRET` and the second as
+`TRAFFIC_GROUP_SECRET`. Production must also use real Cloudflare Turnstile keys;
+the test keys in `.env.example` are refused on public hostnames.
 
 Some Python certificate stores currently cannot build the certificate chain presented by the PIS document host, although browsers may succeed. `PIS_VERIFY_SSL=false` is therefore the local default for that fixed official hostname only. Set it to `true` when verification works in your environment. The GURS/PIS WFS host always uses normal certificate verification.
 

@@ -155,6 +155,8 @@ def test_cookie_controls_are_consent_first_and_reopenable():
     assert 'if (!privacyConsent?.analytics) return;' in script
     assert 'window.localStorage.removeItem(RECENT_SEARCHES_KEY)' in script
     assert 'fetch("/api/privacy/events"' in script
+    assert 'const CONSENT_VERSION = "1.1"' in script
+    assert "analytics_consent: Boolean(privacyConsent?.analytics)" in script
 
 
 def test_privacy_notice_covers_core_disclosures():
@@ -170,8 +172,30 @@ def test_privacy_notice_covers_core_disclosures():
         "Roki hrambe",
         "Vaše pravice",
         "Informacijskem pooblaščencu",
+        "operativni zapisi zahtev z IP-jem",
+        "tehnično oznako skupine",
+        "nista potrjena identiteta osebe",
     ):
         assert required_text in policy_text
+
+
+def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
+    page = html.parse(ROOT / "static" / "admin.html").getroot()
+    script = (ROOT / "static" / "admin.js").read_text(encoding="utf-8")
+
+    assert page.xpath("//*[@id='admin-login-form']")
+    assert page.xpath("//*[@id='admin-login-button' and @disabled]")
+    assert page.xpath("//*[@id='admin-turnstile']")
+    assert page.xpath("//*[@data-admin-tab='overview']")
+    assert page.xpath("//*[@data-admin-tab='requests']")
+    assert page.xpath("//*[@data-admin-tab='logs']")
+    assert page.xpath("//*[@id='statistics-download' and @download]")
+    assert page.xpath("//*[@id='filter-group']")
+    assert page.xpath("//*[@id='filter-ip']")
+    assert 'action: "admin_login"' in script
+    assert 'credentials: "same-origin"' in script
+    assert "filterQuery(false)" in script
+    assert "Tehnična skupina ni oseba" in page.text_content()
 
 
 def test_location_report_has_official_structure_and_local_download():

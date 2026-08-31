@@ -316,7 +316,7 @@
       <div class="cookie-banner-icon" aria-hidden="true">◔</div>
       <div class="cookie-banner-copy">
         <strong>Vaša zasebnost, vaša izbira</strong>
-        <p>Propioscan uporablja nujni piškotek za shranjevanje vaše izbire. Z dovoljenjem lahko na tej napravi shrani nedavna iskanja in psevdonimno zabeleži, katera parcela je bila iskana. Ne uporabljamo oglaševalskih piškotkov.</p>
+        <p>Propioscan uporablja nujni piškotek za shranjevanje vaše izbire. Ob oddaji analize zaradi izvedbe in varnosti storitve največ 30 dni hranimo parcelno oznako, čas, IP ter podatke o brskalniku in napravi. Z dovoljenjem lahko shranimo tudi nedavna iskanja in psevdonimni ID obiskovalca. Ne uporabljamo oglaševalskih piškotkov.</p>
         <button type="button" data-privacy-open>Preberite politiko zasebnosti</button>
       </div>
       <div class="cookie-banner-actions">
@@ -336,7 +336,7 @@
       <div class="privacy-choices">
         <label class="privacy-choice is-required">
           <input type="checkbox" checked disabled>
-          <span><strong>Nujni piškotki</strong><small>Vedno aktivni · shranijo samo vašo izbiro zasebnosti in omogočajo varno delovanje strani.</small></span>
+          <span><strong>Nujni piškotki</strong><small>Vedno aktivni · shranijo vašo izbiro zasebnosti; skrbniški sejni piškotek se uporabi samo pri prijavi skrbnika.</small></span>
           <b>Vedno</b>
         </label>
         <label class="privacy-choice">
@@ -346,7 +346,7 @@
         </label>
         <label class="privacy-choice">
           <input id="cookie-analytics" type="checkbox">
-          <span><strong>Psevdonimna analitika</strong><small>Strežnik za največ 90 dni shrani naključni ID brskalnika, čas in iskano parcelno oznako. Ne shranimo imena, e-pošte, naslova IP ali vsebine dokumentov v analitični zapis. Ob izklopu izbrišemo ID in z njim povezane dogodke.</small></span>
+          <span><strong>Psevdonimna analitika</strong><small>Strežnik za največ 90 dni shrani naključni ID brskalnika, čas in iskano parcelno oznako. Ločeni operativni zapis zahteve vsebuje tudi IP in tehnične podatke ter se hrani največ 30 dni ne glede na to izbiro. Ob izklopu izbrišemo analitični ID in povezavo z njim.</small></span>
           <b>Izbirno</b>
         </label>
       </div>
@@ -360,6 +360,7 @@
               <tr><td><code>propioscan_cookie_consent</code></td><td>Nujni piškotek</td><td>Izbrane kategorije in različica soglasja</td><td>180 dni</td></tr>
               <tr><td><code>propioscan_recent_searches</code></td><td>Lokalna shramba</td><td>Največ 10 nedavnih parcelnih poizvedb</td><td>30 dni</td></tr>
               <tr><td><code>propioscan_visitor_id</code></td><td>Analitični piškotek, HttpOnly</td><td>Naključni psevdonimni ID za povezavo dovoljenih iskalnih dogodkov</td><td>90 dni</td></tr>
+              <tr><td><code>propioscan_admin_session</code></td><td>Nujni skrbniški piškotek, HttpOnly</td><td>Zaščitena prijava v skrbniško ploščo; javnim obiskovalcem se ne nastavi</td><td>8 ur oziroma do odjave</td></tr>
             </tbody>
           </table>
         </div>
@@ -374,7 +375,7 @@
 
     <dialog id="privacy-dialog" class="privacy-dialog privacy-policy-dialog" aria-labelledby="privacy-dialog-title">
       <div class="privacy-dialog-head">
-        <div><span>Različica 1.0 · 26. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
+        <div><span>Različica 1.1 · 31. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
         <button class="dialog-close" type="button" data-privacy-close aria-label="Zapri politiko zasebnosti">×</button>
       </div>
 
@@ -385,21 +386,23 @@
         </section>
         <section>
           <h3>2. Katere podatke obdelujemo</h3>
-          <p>Za izvedbo analize obdelamo vneseno katastrsko občino in parcelno številko, rezultate uradnih evidenc ter začasni identifikator opravila. Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako.</p>
+          <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani.</p>
+          <p>Za skrbniški pregled lahko iz IP-ja in uporabniškega agenta izračunamo kratko tehnično oznako skupine <code>T-*</code>. To je le približek: več oseb lahko uporablja isto oznako, ista oseba pa lahko uporablja več oznak. Oznake ne uporabljamo za avtomatizirano odločanje ali oglaševanje.</p>
+          <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve.</p>
           <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
-          <p>Analitični zapis ne vsebuje vašega imena, e-pošte, naslova IP, oglaševalskega profila ali vsebine prenesenih dokumentov. Naključni ID označuje brskalnik in ni potrjena identiteta osebe.</p>
+          <p>Ne zbiramo imena ali e-pošte obiskovalca in ne ustvarjamo oglaševalskega profila. Naključni analitični ID in tehnična oznaka označujeta brskalnik oziroma tehnično okolje in nista potrjena identiteta osebe.</p>
         </section>
         <section>
           <h3>3. Nameni in pravne podlage</h3>
           <ul>
-            <li><strong>Izvedba zahtevane analize in varnost storitve:</strong> obdelava, potrebna za odgovor na vašo zahtevo in zakoniti interes zagotavljanja delujoče ter varne storitve.</li>
+            <li><strong>Izvedba zahtevane analize in operativna evidenca:</strong> odgovor na vašo zahtevo ter zakoniti interes zagotavljanja delujoče in varne storitve, odpravljanja napak, preprečevanja zlorab in merjenja zanesljivosti.</li>
             <li><strong>Nedavna iskanja:</strong> vaše soglasje; funkcijo lahko zavrnete ali kadar koli izključite.</li>
             <li><strong>Psevdonimna analitika:</strong> vaše soglasje; uporablja se za razumevanje uporabe in izboljšanje storitve.</li>
           </ul>
         </section>
         <section>
           <h3>4. Viri, prejemniki in prenosi</h3>
-          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo. Ponudnika lahko podatke obdelujeta zunaj EGP skladno z veljavnimi pogodbenimi zaščitami upravljavca. Pred javnim zagonom mora upravljavec potrditi ustrezne pogodbe o obdelavi podatkov in mehanizme prenosa.</p>
+          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo. Ponudniki lahko podatke obdelujejo zunaj EGP na podlagi veljavnih pogodbenih in drugih ustreznih zaščit.</p>
           <p>Propioscan podatkov ne prodaja in ne uporablja oglaševalskih ali profilirnih piškotkov.</p>
         </section>
         <section>
@@ -408,7 +411,10 @@
             <li>izbira piškotkov: 180 dni;</li>
             <li>nedavna iskanja v vašem brskalniku: 30 dni oziroma do preklica;</li>
             <li>psevdonimni ID in dovoljeni analitični dogodki: največ 90 dni;</li>
-            <li>rezultati trenutnega opravila: v pomnilniku strežnika do ponovnega zagona aplikacije;</li>
+            <li>operativni zapisi zahtev z IP-jem in tehničnimi podatki: največ 30 dni;</li>
+            <li>rezultati zaključenega ali neuspelega opravila: največ 30 dni;</li>
+            <li>neuspešni poskusi skrbniške prijave: največ 24 ur;</li>
+            <li>skrbniška seja: največ 8 ur oziroma do odjave;</li>
             <li>predpomnjeni uradni dokumenti in zemljevidi: niso povezani z analitičnim ID-jem in se hranijo za učinkovito ponovno uporabo.</li>
           </ul>
         </section>
@@ -421,8 +427,8 @@
           <p>AI-povzetek in ocene so informativna pomoč, ne odločitev s pravnim ali podobno pomembnim učinkom. Ne nadomestijo veljavnega prostorskega akta, lokacijske informacije, upravne odločbe ali strokovnega mnenja.</p>
         </section>
         <section class="privacy-compliance-note">
-          <h3>Pred javnim zagonom</h3>
-          <p>V tej politiki je treba dopolniti polno registrirano ime upravljavca, poslovni naslov, matično in davčno številko ter potrditi dejanske pogodbe z obdelovalci. Ta tehnična izvedba sama po sebi ni pravno svetovanje ali jamstvo popolne skladnosti.</p>
+          <h3>8. Varnost in skrbniški dostop</h3>
+          <p>Skrbniška plošča je zaščitena z uporabniškim imenom, močnim zgoščenim geslom, preverjanjem Turnstile, omejevanjem neuspelih prijav in časovno omejenim varnim sejnim piškotkom. Dostop do evidenc je namenjen samo pooblaščenemu skrbniku.</p>
         </section>
       </div>
 

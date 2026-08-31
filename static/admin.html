@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="sl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="theme-color" content="#10243d">
+    <link rel="icon" type="image/png" href="/static/propioscan-mark.png">
+    <link rel="stylesheet" href="/static/admin.css">
+    <script src="/static/admin.js" defer></script>
+    <title>Propioscan · skrbniška plošča</title>
+  </head>
+  <body>
+    <main class="admin-page">
+      <section id="admin-login" class="login-shell" aria-labelledby="login-title">
+        <article class="login-card">
+          <a class="admin-brand" href="/" aria-label="Propioscan domov">
+            <img src="/static/propioscan-mark.png" alt="">
+            <span><strong>Propio<span>scan</span></strong><small>Skrbniška plošča</small></span>
+          </a>
+          <div class="login-copy">
+            <span class="eyebrow">Zaščiten dostop</span>
+            <h1 id="login-title">Prijava skrbnika</h1>
+            <p>Vnesite skrbniške podatke in opravite preverjanje, da zahtevo pošilja oseba.</p>
+          </div>
+          <form id="admin-login-form">
+            <label>Uporabniško ime<input id="admin-username" name="username" autocomplete="username" required maxlength="128"></label>
+            <label>Geslo<input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="512"></label>
+            <div id="admin-turnstile" class="admin-turnstile" aria-label="Varnostno preverjanje"></div>
+            <p id="admin-human-status" class="form-note">Nalagam varnostno preverjanje …</p>
+            <button id="admin-login-button" type="submit" disabled>Prijavi se</button>
+            <p id="admin-login-error" class="form-error" role="alert" hidden></p>
+          </form>
+          <p class="login-security">Prijava uporablja omejevanje poskusov in varen časovno omejen sejni piškotek.</p>
+        </article>
+      </section>
+
+      <section id="admin-dashboard" class="dashboard" hidden>
+        <aside class="admin-sidebar">
+          <a class="admin-brand admin-brand-light" href="/">
+            <img src="/static/propioscan-mark.png" alt="">
+            <span><strong>Propio<span>scan</span></strong><small>Administracija</small></span>
+          </a>
+          <nav aria-label="Skrbniška področja">
+            <button class="admin-tab is-active" type="button" data-admin-tab="overview"><span>01</span>Pregled</button>
+            <button class="admin-tab" type="button" data-admin-tab="requests"><span>02</span>Zahteve za parcele</button>
+            <button class="admin-tab" type="button" data-admin-tab="logs"><span>03</span>Dnevniki aplikacije</button>
+          </nav>
+          <div class="admin-sidebar-foot">
+            <p>Prijavljen: <strong id="admin-session-user">—</strong></p>
+            <button id="admin-logout" type="button">Odjava</button>
+          </div>
+        </aside>
+
+        <div class="admin-content">
+          <header class="admin-header">
+            <div><span>Propioscan · nadzor</span><h1 id="admin-page-title">Pregled uporabe</h1></div>
+            <a href="/" target="_blank" rel="noopener noreferrer">Odpri javno stran ↗</a>
+          </header>
+
+          <section class="admin-panel" data-admin-panel="overview">
+            <div id="admin-summary" class="summary-grid" aria-live="polite"></div>
+            <div class="panel-grid">
+              <article class="info-panel">
+                <span class="panel-kicker">Zadnjih 30 dni</span>
+                <h2>Operativni pregled</h2>
+                <p>Števila temeljijo na dejansko sprejetih zahtevah za analizo. IP in tehnični podatki se hranijo največ 30 dni.</p>
+                <button type="button" data-open-admin-tab="requests">Odpri zahteve</button>
+              </article>
+              <article class="info-panel privacy-panel">
+                <span class="panel-kicker">Pomembno</span>
+                <h2>Tehnična skupina ni oseba</h2>
+                <p>Skupina T-* je približek iz IP-ja in uporabniškega agenta. Več oseb lahko uporablja isto skupino, ista oseba pa več skupin.</p>
+              </article>
+            </div>
+            <article class="table-card">
+              <header><div><span>Najnovejše</span><h2>Zadnje zahteve</h2></div></header>
+              <div class="table-scroll"><table><thead><tr><th>Čas</th><th>Parcela</th><th>Stanje</th><th>Naprava</th><th>IP</th></tr></thead><tbody id="overview-requests"></tbody></table></div>
+            </article>
+          </section>
+
+          <section class="admin-panel" data-admin-panel="requests" hidden>
+            <form id="request-filters" class="filter-card">
+              <label>Od<input id="filter-from" name="date_from" type="date"></label>
+              <label>Do<input id="filter-to" name="date_to" type="date"></label>
+              <label>Parcela<input id="filter-parcel" name="parcel" placeholder="npr. 2057 314/4"></label>
+              <label>IP naslov<input id="filter-ip" name="ip" placeholder="IP ali del naslova"></label>
+              <label>Naprava<select id="filter-device" name="device"><option value="">Vse</option><option value="desktop">Namizna</option><option value="mobile">Mobilna</option><option value="tablet">Tablica</option><option value="bot">Robot</option></select></label>
+              <label>Stanje<select id="filter-status" name="request_status"><option value="">Vsa</option><option value="completed">Končano</option><option value="failed">Napaka</option><option value="running">V teku</option><option value="queued">V vrsti</option></select></label>
+              <label>Obiskovalec / skupina<input id="filter-visitor" name="visitor" placeholder="ID, T-* ali zahteva"></label>
+              <label>Združi po<select id="filter-group" name="group_by"><option value="visitor">Dovoljenem ID obiskovalca</option><option value="technical">Tehničnem približku T-*</option><option value="ip">IP naslovu</option><option value="parcel">Parceli</option><option value="device">Vrsti naprave</option><option value="day">Dnevu</option><option value="status">Stanju</option><option value="none">Brez združevanja</option></select></label>
+              <div class="filter-actions"><button type="submit">Uporabi filtre</button><button id="filters-reset" class="secondary" type="button">Ponastavi</button><a id="statistics-download" href="/api/admin/requests.csv" download>Prenesi izbrani CSV</a></div>
+            </form>
+
+            <div id="request-summary" class="summary-grid"></div>
+            <article id="groups-card" class="table-card">
+              <header><div><span>Združevanje</span><h2 id="groups-title">Skupine zahtev</h2></div><p id="grouping-note">ID obiskovalca obstaja samo ob soglasju za analitiko.</p></header>
+              <div class="table-scroll"><table><thead><tr><th>Skupina</th><th>Zahteve</th><th>Različni IP-ji</th><th>Zadnja zahteva</th></tr></thead><tbody id="request-groups"></tbody></table></div>
+            </article>
+            <article class="table-card">
+              <header><div><span>Podrobnosti</span><h2>Posamezne zahteve</h2></div><p id="request-count">—</p></header>
+              <div class="table-scroll"><table class="request-table"><thead><tr><th>Čas</th><th>Parcela</th><th>Stanje</th><th>IP</th><th>Obiskovalec</th><th>Tehnična skupina</th><th>Naprava</th><th>Brskalnik / OS</th><th>Jezik</th><th>Napotitev</th><th>Analitika</th><th>Opravilo</th></tr></thead><tbody id="request-rows"></tbody></table></div>
+              <footer class="pagination"><button id="page-previous" type="button">← Prejšnja</button><span id="page-status">—</span><button id="page-next" type="button">Naslednja →</button></footer>
+            </article>
+          </section>
+
+          <section class="admin-panel" data-admin-panel="logs" hidden>
+            <article class="log-card">
+              <header>
+                <div><span>Diagnostika</span><h2>Dnevniki aplikacije</h2></div>
+                <div class="log-controls"><select id="log-source" aria-label="Vir dnevnika"></select><select id="log-lines" aria-label="Število vrstic"><option value="100">100 vrstic</option><option value="300" selected>300 vrstic</option><option value="500">500 vrstic</option><option value="1000">1000 vrstic</option></select><button id="logs-refresh" type="button">Osveži</button></div>
+              </header>
+              <p id="log-meta">—</p>
+              <pre id="log-output" tabindex="0">Nalagam …</pre>
+            </article>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

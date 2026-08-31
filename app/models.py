@@ -237,13 +237,21 @@ class SearchResult(BaseModel):
 class SearchRequest(BaseModel):
     parcel_number: str = Field(min_length=3, max_length=40)
     captcha_token: str | None = Field(default=None, max_length=2048)
+    analytics_consent: bool = False
+    consent_version: Literal["1.1"] | None = None
+
+
+class AdminLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=512)
+    captcha_token: str | None = Field(default=None, max_length=2048)
 
 
 class PrivacyEventRequest(BaseModel):
     event_type: Literal["parcel_search"]
     parcel_reference: str = Field(min_length=3, max_length=40)
     analytics_consent: Literal[True]
-    consent_version: Literal["1.0"]
+    consent_version: Literal["1.1"]
 
 
 class JobStatus(str, Enum):

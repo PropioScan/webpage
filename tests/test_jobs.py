@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.models import JobStatus
@@ -101,5 +102,35 @@ def test_process_launch_failure_is_persisted(tmp_path: Path, monkeypatch) -> Non
         assert job is not None
         assert job.status == JobStatus.failed
         assert "ozadju" in (job.error or "")
+    finally:
+        manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_finished_job_results_are_purged_after_retention(tmp_path: Path) -> None:
+    manager = JobManager(IdleService(), workers=1, data_dir=tmp_path, retention_days=30)
+    try:
+        from app.models import JobView
+
+        now = datetime(2026, 8, 31, tzinfo=timezone.utc)
+        old_job = JobView(
+            id="b" * 32,
+            status=JobStatus.completed,
+            progress=100,
+            message="Done",
+            parcel_number="2057 314/4",
+            created_at=now - timedelta(days=31),
+            updated_at=now - timedelta(days=31),
+        )
+        active_job = old_job.model_copy(
+            update={"id": "c" * 32, "status": JobStatus.running}
+        )
+        with manager._lock:
+            for job in (old_job, active_job):
+                manager._jobs[job.id] = job
+                manager._persist_locked(job)
+
+        assert manager.purge_expired(now) == 1
+        assert not (tmp_path / "jobs" / f"{old_job.id}.json").exists()
+        assert (tmp_path / "jobs" / f"{active_job.id}.json").exists()
     finally:
         manager.executor.shutdown(wait=False, cancel_futures=True)

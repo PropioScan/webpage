@@ -25,7 +25,7 @@ const reportDownload = document.querySelector("#report-download");
 const reportDownloadLabel = document.querySelector("#report-download-label");
 const reportDownloadStatus = document.querySelector("#report-download-status");
 
-const CONSENT_VERSION = "1.0";
+const CONSENT_VERSION = "1.1";
 const CONSENT_COOKIE = "propioscan_cookie_consent";
 const RECENT_SEARCHES_KEY = "propioscan_recent_searches";
 const CONSENT_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
@@ -154,7 +154,12 @@ async function beginParcelSearch(parcelReference, captchaToken) {
     const response = await fetch("/api/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parcel_number: parcelReference, captcha_token: captchaToken }),
+      body: JSON.stringify({
+        parcel_number: parcelReference,
+        captcha_token: captchaToken,
+        analytics_consent: Boolean(privacyConsent?.analytics),
+        consent_version: privacyConsent?.analytics ? CONSENT_VERSION : null,
+      }),
     });
     if (!response.ok) throw new Error(await errorMessage(response));
     rememberRecentSearch(parcelReference);
