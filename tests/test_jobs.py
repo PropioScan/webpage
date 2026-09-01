@@ -1,13 +1,22 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.models import JobStatus
+from app.models import JobStatus, ParcelInformation, SearchResult
 from app.jobs import JobManager
 
 
 class IdleService:
     def search(self, parcel_number, progress):  # pragma: no cover - never scheduled
         raise AssertionError("search should not run in this test")
+
+
+def _search_result() -> SearchResult:
+    return SearchResult(
+        parcel=ParcelInformation(
+            cadastral_municipality_id=2057,
+            parcel_number="314/4",
+        )
+    )
 
 
 def test_job_state_can_be_read_by_another_passenger_process(tmp_path: Path) -> None:
@@ -50,9 +59,7 @@ def test_job_state_rejects_path_traversal_ids(tmp_path: Path) -> None:
         manager.executor.shutdown(wait=False, cancel_futures=True)
 
 
-def test_process_mode_launches_a_detached_disk_job(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_process_mode_launches_a_detached_disk_job(tmp_path: Path, monkeypatch) -> None:
     launched: list[tuple[list[str], dict[str, object]]] = []
 
     def fake_popen(command, **kwargs):
@@ -104,6 +111,85 @@ def test_process_launch_failure_is_persisted(tmp_path: Path, monkeypatch) -> Non
         assert "ozadju" in (job.error or "")
     finally:
         manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_submit_returns_a_completed_job_from_the_shared_result_cache(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def unexpected_launch(*args, **kwargs):  # pragma: no cover - assertion only
+        raise AssertionError("a cached result must not launch a worker")
+
+    monkeypatch.setattr("app.jobs.subprocess.Popen", unexpected_launch)
+    manager = JobManager(
+        IdleService(), workers=1, data_dir=tmp_path, execution_mode="process"
+    )
+    try:
+        assert manager.result_cache is not None
+        manager.result_cache.put("2057 314/4", _search_result())
+
+        job = manager.submit("2057   314/4")
+
+        assert job.status == JobStatus.completed
+        assert job.progress == 100
+        assert job.from_cache is True
+        assert job.result is not None
+        assert job.cache_stored_at is not None
+        assert job.cache_expires_at is not None
+    finally:
+        manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_force_refresh_bypasses_an_available_result_cache(
+    tmp_path: Path, monkeypatch
+) -> None:
+    launched: list[list[str]] = []
+
+    def fake_popen(command, **kwargs):
+        launched.append(command)
+        return object()
+
+    monkeypatch.setattr("app.jobs.subprocess.Popen", fake_popen)
+    manager = JobManager(
+        IdleService(), workers=1, data_dir=tmp_path, execution_mode="process"
+    )
+    try:
+        assert manager.result_cache is not None
+        manager.result_cache.put("2057 314/4", _search_result())
+
+        job = manager.submit("2057 314/4", force_refresh=True)
+
+        assert job.status == JobStatus.queued
+        assert job.from_cache is False
+        assert len(launched) == 1
+    finally:
+        manager.executor.shutdown(wait=False, cancel_futures=True)
+
+
+def test_successful_thread_job_populates_cache_for_the_next_request(
+    tmp_path: Path,
+) -> None:
+    class SuccessfulService:
+        def search(self, parcel_number, progress):
+            progress(50, "Working")
+            return _search_result()
+
+    first = JobManager(SuccessfulService(), workers=1, data_dir=tmp_path)
+    try:
+        submitted = first.submit("2057 314/4")
+        first.executor.shutdown(wait=True, cancel_futures=False)
+        completed = first.get(submitted.id)
+        assert completed is not None
+        assert completed.status == JobStatus.completed
+    finally:
+        first.executor.shutdown(wait=False, cancel_futures=True)
+
+    second = JobManager(IdleService(), workers=1, data_dir=tmp_path)
+    try:
+        cached = second.submit("2057 314/4")
+        assert cached.status == JobStatus.completed
+        assert cached.from_cache is True
+    finally:
+        second.executor.shutdown(wait=False, cancel_futures=True)
 
 
 def test_finished_job_results_are_purged_after_retention(tmp_path: Path) -> None:

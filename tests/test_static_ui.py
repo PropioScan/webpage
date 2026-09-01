@@ -49,7 +49,9 @@ def test_planning_acts_and_documents_are_not_in_overview_panel():
 def test_risk_scale_explains_every_grade():
     page = _page()
     overview = page.get_element_by_id("result-panel-overview")
-    grades = overview.xpath(".//*[contains(concat(' ', normalize-space(@class), ' '), ' grade-scale ')]//b/text()")
+    grades = overview.xpath(
+        ".//*[contains(concat(' ', normalize-space(@class), ' '), ' grade-scale ')]//b/text()"
+    )
 
     assert grades == ["5", "4", "3", "2", "1"]
     for element_id in ("protected-areas", "cultural-heritage", "constraints", "risks"):
@@ -60,8 +62,14 @@ def test_overview_uses_requested_single_and_four_column_layouts():
     styles = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
 
     assert ".compact-access { grid-template-columns: 1fr; }" in styles
-    assert ".compact-access .infrastructure-grid { grid-template-columns: 1fr; gap: 7px; }" in styles
-    assert ".risk-score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));" in styles
+    assert (
+        ".compact-access .infrastructure-grid { grid-template-columns: 1fr; gap: 7px; }"
+        in styles
+    )
+    assert (
+        ".risk-score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));"
+        in styles
+    )
 
 
 def test_frontend_builds_an_image_tab_for_each_visual():
@@ -101,7 +109,10 @@ def test_analysis_requires_a_user_triggered_turnstile_check():
     assert page.xpath("//*[@id='captcha-panel' and @hidden]")
     assert page.xpath("//*[@id='turnstile-widget']")
     assert page.xpath("//*[@id='captcha-check' and @disabled]")
-    assert "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" in script
+    assert (
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        in script
+    )
     assert 'action: "parcel_search"' in script
     assert 'appearance: "interaction-only"' in script
     assert 'execution: "execute"' in script
@@ -112,10 +123,28 @@ def test_analysis_requires_a_user_triggered_turnstile_check():
     assert "async function beginParcelSearch" in script
 
 
+def test_cached_analysis_is_disclosed_and_can_be_checked_again():
+    page = _page()
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    notice = page.get_element_by_id("cache-notice")
+    assert notice.get("hidden") == ""
+    assert "Prikazani so shranjeni podatki" in notice.text_content()
+    assert page.xpath("//*[@id='cache-refresh' and @type='button']")
+    assert "Preveri znova z aktualnimi viri" in notice.text_content()
+    assert "force_refresh: forceRefresh" in script
+    assert "if (!job.from_cache)" in script
+    assert "job.cache_stored_at || result.completed_at" in script
+    assert "requestParcelSearch(activeParcelReference, true)" in script
+    assert 'pendingForceRefresh ? "Preveri znova" : "Analiziraj"' in script
+
+
 def test_propioscan_brand_and_legal_footer_are_present():
     page = _page()
 
-    assert page.xpath("//title[text()='Pregled parcele in prostorski akti | Propioscan']")
+    assert page.xpath(
+        "//title[text()='Pregled parcele in prostorski akti | Propioscan']"
+    )
     assert page.xpath("//link[@rel='canonical' and @href='https://propioscan.com/']")
     assert page.xpath("//img[@src='/static/propioscan-mark.png']")
     assert "Propioscan" in page.text_content()
@@ -131,10 +160,14 @@ def test_propioscan_brand_and_legal_footer_are_present():
 def test_homepage_has_complete_search_and_social_metadata():
     page = _page()
 
-    assert page.xpath("//meta[@name='description' and contains(@content, 'GURS in PIS')]")
+    assert page.xpath(
+        "//meta[@name='description' and contains(@content, 'GURS in PIS')]"
+    )
     assert page.xpath("//meta[@name='robots' and contains(@content, 'index, follow')]")
     assert page.xpath("//meta[@property='og:locale' and @content='sl_SI']")
-    assert page.xpath("//meta[@property='og:image' and starts-with(@content, 'https://propioscan.com/')]")
+    assert page.xpath(
+        "//meta[@property='og:image' and starts-with(@content, 'https://propioscan.com/')]"
+    )
     assert page.xpath("//meta[@name='twitter:card' and @content='summary_large_image']")
     assert page.xpath("//link[@rel='alternate' and @hreflang='sl-SI']")
     assert page.xpath("//h1[contains(normalize-space(.), 'Pregled parcele')]")
@@ -148,13 +181,27 @@ def test_homepage_structured_data_matches_visible_service():
     data = json.loads(scripts[0])
     types = {entry["@type"] for entry in data["@graph"]}
     assert types == {"Organization", "WebSite", "SoftwareApplication"}
-    application = next(entry for entry in data["@graph"] if entry["@type"] == "SoftwareApplication")
-    assert application["offers"] == {"@type": "Offer", "price": "0", "priceCurrency": "EUR"}
+    application = next(
+        entry for entry in data["@graph"] if entry["@type"] == "SoftwareApplication"
+    )
+    assert application["offers"] == {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR",
+    }
     assert application["operatingSystem"] == "Any"
 
-    overview = page.xpath("//*[contains(concat(' ', normalize-space(@class), ' '), ' seo-overview ')]")[0]
+    overview = page.xpath(
+        "//*[contains(concat(' ', normalize-space(@class), ' '), ' seo-overview ')]"
+    )[0]
     overview_text = " ".join(overview.text_content().split())
-    for phrase in ("Namenska raba", "prostorski akti", "Infrastruktura", "omejitve", "PDF izpis"):
+    for phrase in (
+        "Namenska raba",
+        "prostorski akti",
+        "Infrastruktura",
+        "omejitve",
+        "PDF izpis",
+    ):
         assert phrase in overview_text
 
 
@@ -162,9 +209,15 @@ def test_desktop_utility_bar_has_no_source_status_or_developer_metrics():
     page = _page()
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
-    assert not page.xpath("//*[contains(concat(' ', normalize-space(@class), ' '), ' header-status ')]")
-    assert not page.xpath("//*[contains(concat(' ', normalize-space(@class), ' '), ' developer-zone ')]")
-    assert not page.xpath("//*[@id='developer-model' or @id='developer-used' or @id='developer-remaining']")
+    assert not page.xpath(
+        "//*[contains(concat(' ', normalize-space(@class), ' '), ' header-status ')]"
+    )
+    assert not page.xpath(
+        "//*[contains(concat(' ', normalize-space(@class), ' '), ' developer-zone ')]"
+    )
+    assert not page.xpath(
+        "//*[@id='developer-model' or @id='developer-used' or @id='developer-remaining']"
+    )
     assert "renderDeveloperUsage" not in script
 
 
@@ -182,9 +235,9 @@ def test_cookie_controls_are_consent_first_and_reopenable():
     assert len(page.xpath("//*[@data-cookie-settings]")) >= 2
     assert "fonts.googleapis.com" not in source
 
-    assert 'if (!privacyConsent?.functional) return;' in script
-    assert 'if (!privacyConsent?.analytics) return;' in script
-    assert 'window.localStorage.removeItem(RECENT_SEARCHES_KEY)' in script
+    assert "if (!privacyConsent?.functional) return;" in script
+    assert "if (!privacyConsent?.analytics) return;" in script
+    assert "window.localStorage.removeItem(RECENT_SEARCHES_KEY)" in script
     assert 'fetch("/api/privacy/events"' in script
     assert 'const CONSENT_VERSION = "1.2"' in script
     assert "analytics_consent: Boolean(privacyConsent?.analytics)" in script
@@ -198,7 +251,14 @@ def test_cookie_controls_are_consent_first_and_reopenable():
     assert "allow_ad_personalization_signals: false" in script
     assert "parcel_analysis_completed" in script
     assert "location_report_downloaded" in script
-    assert "parcel_reference" not in script[script.index("function recordGoogleEvent"):script.index("function analysisDurationParameters")]
+    assert (
+        "parcel_reference"
+        not in script[
+            script.index("function recordGoogleEvent") : script.index(
+                "function analysisDurationParameters"
+            )
+        ]
+    )
     assert "googletagmanager.com" not in source
 
 
@@ -251,10 +311,10 @@ def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
     assert "window.turnstile.execute(turnstileWidget)" in script
     assert 'credentials: "same-origin"' in script
     assert "filterQuery(false)" in script
-    assert 'api(`/api/admin/analytics?${query}`)' in script
+    assert "api(`/api/admin/analytics?${query}`)" in script
     assert "renderAnalyticsSummary" in script
     assert "renderAnalyticsDaily" in script
-    assert 'api(`/api/admin/openai-usage?days=${days}`)' in script
+    assert "api(`/api/admin/openai-usage?days=${days}`)" in script
     assert "renderOpenAISummary" in script
     assert "renderOpenAIRateLimit" in script
     assert "Tehnična skupina ni oseba" in page.text_content()
@@ -273,11 +333,19 @@ def test_location_report_has_official_structure_and_local_download():
     assert page.xpath("//*[@id='report-download' and @download]")
     assert panel.xpath(".//*[@id='report-parcel-reference']")
     assert panel.xpath(".//*[@id='report-cadastral-municipality']")
-    assert page.xpath("//a[@href='https://pisrs.si/api/datoteke/integracije/351620891']")
-    assert 'number: 10' in script
+    assert page.xpath(
+        "//a[@href='https://pisrs.si/api/datoteke/integracije/351620891']"
+    )
+    assert "number: 10" in script
     assert "function renderOfficialForm" in script
     assert "function officialSection" in script
-    assert 'reportDownload.href = `/api/search/${encodeURIComponent(jobId)}/report`' in script
+    assert (
+        "reportDownload.href = `/api/search/${encodeURIComponent(jobId)}/report`"
+        in script
+    )
     assert "async function downloadLocationReport" in script
     assert 'headers: { Accept: "application/pdf" }' in script
-    assert "Priloga: prostorski izvedbeni pogoji" in source or "Priloga: prostorski izvedbeni pogoji" in script
+    assert (
+        "Priloga: prostorski izvedbeni pogoji" in source
+        or "Priloga: prostorski izvedbeni pogoji" in script
+    )

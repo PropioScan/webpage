@@ -24,6 +24,9 @@ const recentParcels = document.querySelector("#recent-parcels");
 const reportDownload = document.querySelector("#report-download");
 const reportDownloadLabel = document.querySelector("#report-download-label");
 const reportDownloadStatus = document.querySelector("#report-download-status");
+const cacheNotice = document.querySelector("#cache-notice");
+const cacheNoticeText = document.querySelector("#cache-notice-text");
+const cacheRefresh = document.querySelector("#cache-refresh");
 
 const CONSENT_VERSION = "1.2";
 const CONSENT_COOKIE = "propioscan_cookie_consent";
@@ -48,6 +51,9 @@ let captchaAwaiting = false;
 let captchaVerifiedToken = null;
 let searchStarting = false;
 let analysisStartedAt = null;
+let pendingParcelReference = null;
+let pendingForceRefresh = false;
+let activeParcelReference = null;
 
 initializePrivacyControls();
 
@@ -73,6 +79,12 @@ document.querySelectorAll("[data-open-result-tab]").forEach((control) => control
 }));
 
 reportDownload?.addEventListener("click", downloadLocationReport);
+
+cacheRefresh?.addEventListener("click", () => {
+  if (!activeParcelReference || searchStarting || captchaAwaiting) return;
+  input.value = activeParcelReference;
+  requestParcelSearch(activeParcelReference, true);
+});
 
 captchaCheck?.addEventListener("click", () => {
   if (!captchaAwaiting || turnstileWidgetId === null || !window.turnstile) return;
@@ -120,12 +132,21 @@ const formatBytes = (value) => {
   return `${(value / (1024 ** index)).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
 };
 
-form.addEventListener("submit", async (event) => {
+form.addEventListener("submit", (event) => {
   event.preventDefault();
   const parcelReference = input.value.trim();
   if (!parcelReference || button.disabled) return;
+  const forceRefresh = pendingForceRefresh && pendingParcelReference === parcelReference;
+  requestParcelSearch(parcelReference, forceRefresh);
+});
+
+async function requestParcelSearch(parcelReference, forceRefresh = false) {
+  if (!parcelReference || searchStarting || captchaAwaiting) return;
+  pendingParcelReference = parcelReference;
+  pendingForceRefresh = forceRefresh;
   errorPanel.hidden = true;
   button.disabled = true;
+  if (cacheRefresh) cacheRefresh.disabled = true;
   buttonLabel.textContent = "Preverjanje …";
 
   try {
@@ -137,33 +158,46 @@ form.addEventListener("submit", async (event) => {
       if (captchaVerifiedToken) {
         const token = captchaVerifiedToken;
         captchaVerifiedToken = null;
-        await beginParcelSearch(parcelReference, token);
+        pendingParcelReference = null;
+        pendingForceRefresh = false;
+        await beginParcelSearch(parcelReference, token, forceRefresh);
         return;
       }
       captchaAwaiting = true;
       await showCaptcha(config.turnstile_site_key);
       return;
     }
-    await beginParcelSearch(parcelReference, null);
+    pendingParcelReference = null;
+    pendingForceRefresh = false;
+    await beginParcelSearch(parcelReference, null, forceRefresh);
   } catch (error) {
     captchaAwaiting = false;
+    pendingParcelReference = null;
+    pendingForceRefresh = false;
     showError(error.message || "Varnostnega preverjanja ni bilo mogoče zagnati.");
     button.disabled = false;
+    if (cacheRefresh) cacheRefresh.disabled = false;
     buttonLabel.textContent = "Analiziraj";
   }
-});
+}
 
-async function beginParcelSearch(parcelReference, captchaToken) {
+async function beginParcelSearch(parcelReference, captchaToken, forceRefresh = false) {
   if (searchStarting) return;
   searchStarting = true;
   captchaAwaiting = false;
   captchaVerifiedToken = null;
   captchaPanel.hidden = true;
-  resetView();
+  if (!forceRefresh || resultsSection.hidden) resetView();
+  else errorPanel.hidden = true;
   button.disabled = true;
+  if (cacheRefresh) cacheRefresh.disabled = true;
   buttonLabel.textContent = "Analiziram …";
   statusPanel.hidden = false;
-  updateStatus(0, "Analiza je v čakalni vrsti …", "Večji arhivi PIS lahko zahtevajo nekaj minut.");
+  updateStatus(
+    0,
+    forceRefresh ? "Začenjamo nov pregled virov …" : "Analiza je v čakalni vrsti …",
+    "Večji arhivi PIS lahko zahtevajo nekaj minut.",
+  );
   try {
     const response = await fetch("/api/search", {
       method: "POST",
@@ -173,6 +207,7 @@ async function beginParcelSearch(parcelReference, captchaToken) {
         captcha_token: captchaToken,
         analytics_consent: Boolean(privacyConsent?.analytics),
         consent_version: privacyConsent?.analytics ? CONSENT_VERSION : null,
+        force_refresh: forceRefresh,
       }),
     });
     if (!response.ok) throw new Error(await errorMessage(response));
@@ -190,7 +225,10 @@ async function beginParcelSearch(parcelReference, captchaToken) {
     showError(error.message || "Analize ni bilo mogoče začeti.");
   } finally {
     searchStarting = false;
+    pendingParcelReference = null;
+    pendingForceRefresh = false;
     button.disabled = false;
+    if (cacheRefresh) cacheRefresh.disabled = false;
     buttonLabel.textContent = "Analiziraj";
     if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
   }
@@ -323,6 +361,7 @@ async function showCaptcha(siteKey) {
     window.turnstile.reset(turnstileWidgetId);
     captchaCheck.disabled = false;
     captchaMessage.textContent = "Kliknite gumb za varnostno preverjanje.";
+    captchaPanel.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
@@ -343,7 +382,7 @@ async function showCaptcha(siteKey) {
       captchaCheck.disabled = true;
       captchaCheck.querySelector("strong").textContent = "Preverjeno";
       button.disabled = false;
-      buttonLabel.textContent = "Analiziraj";
+      buttonLabel.textContent = pendingForceRefresh ? "Preveri znova" : "Analiziraj";
     },
     "error-callback": () => {
       captchaVerifiedToken = null;
@@ -369,6 +408,7 @@ async function showCaptcha(siteKey) {
   });
   captchaCheck.disabled = false;
   captchaMessage.textContent = "Kliknite gumb za varnostno preverjanje.";
+  captchaPanel.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function loadTurnstileScript() {
@@ -398,7 +438,7 @@ async function pollJob(jobId) {
     updateStatus(job.progress, job.message, "Uradne evidence in dokumente preverjamo v ozadju.");
     if (job.status === "completed") {
       statusPanel.hidden = true;
-      renderResult(job.result, job.id);
+      renderResult(job.result, job);
       recordGoogleEvent("parcel_analysis_completed", analysisDurationParameters());
       analysisStartedAt = null;
       return;
@@ -427,6 +467,8 @@ function updateStatus(progress, title, detail) {
 function resetView() {
   errorPanel.hidden = true;
   resultsSection.hidden = true;
+  cacheNotice.hidden = true;
+  activeParcelReference = null;
   activateResultTab("overview");
   document.querySelector("#parcel-overview").replaceChildren();
   document.querySelector("#parcel-visuals").replaceChildren();
@@ -457,7 +499,10 @@ function showError(message) {
   errorPanel.hidden = false;
 }
 
-function renderResult(result, jobId) {
+function renderResult(result, job) {
+  const jobId = job.id;
+  activeParcelReference = `${result.parcel.cadastral_municipality_id} ${result.parcel.parcel_number}`;
+  renderCacheNotice(result, job);
   renderParcel(result.parcel);
   renderVisualGallery(result.parcel_map, result.planning_land_use_map, result.land_use_assessment);
   renderLandUse(result.land_use_assessment);
@@ -474,6 +519,17 @@ function renderResult(result, jobId) {
   activateResultTab("overview");
   resultsSection.hidden = false;
   resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderCacheNotice(result, job) {
+  if (!job.from_cache) {
+    cacheNotice.hidden = true;
+    return;
+  }
+  const preparedAt = formatReportDate(job.cache_stored_at || result.completed_at);
+  const expiresAt = formatReportDate(job.cache_expires_at);
+  cacheNoticeText.textContent = `Analiza je bila pripravljena ${preparedAt} in je lahko stara do 7 dni. Shranjena različica velja do ${expiresAt}. Za najnovejše stanje zaženite nov pregled uradnih virov.`;
+  cacheNotice.hidden = false;
 }
 
 function renderOfficialForm(result, jobId) {

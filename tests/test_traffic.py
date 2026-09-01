@@ -54,9 +54,7 @@ def test_csv_export_uses_selected_grouping_and_filters(tmp_path):
     _record(store, "r2", "b" * 32, "2057 314/4", "192.0.2.1", now)
     _record(store, "r3", "c" * 32, "2057 999/1", "192.0.2.2", now)
 
-    filename, content = store.export_csv(
-        RequestFilters(parcel="314/4", group_by="ip")
-    )
+    filename, content = store.export_csv(RequestFilters(parcel="314/4", group_by="ip"))
     rows = list(csv.DictReader(io.StringIO(content)))
 
     assert filename == "propioscan-statistika-ip.csv"
@@ -70,9 +68,7 @@ def test_csv_export_uses_selected_grouping_and_filters(tmp_path):
         }
     ]
 
-    _, detailed = store.export_csv(
-        RequestFilters(parcel="314/4", group_by="none")
-    )
+    _, detailed = store.export_csv(RequestFilters(parcel="314/4", group_by="none"))
     assert "user_agent" in detailed.splitlines()[0]
     assert "analytics_consent" in detailed.splitlines()[0]
 
@@ -100,7 +96,9 @@ def test_traffic_retention_and_visitor_withdrawal(tmp_path):
 
 def test_device_classifier_distinguishes_bot_and_desktop():
     assert classify_user_agent("Googlebot/2.1")[0] == "bot"
-    assert classify_user_agent("Mozilla/5.0 (Windows NT 10.0) Firefox/120")[0] == "desktop"
+    assert (
+        classify_user_agent("Mozilla/5.0 (Windows NT 10.0) Firefox/120")[0] == "desktop"
+    )
 
 
 def test_openai_usage_is_synced_from_jobs_aggregated_and_exported(tmp_path):
@@ -192,3 +190,50 @@ def test_openai_usage_is_synced_from_jobs_aggregated_and_exported(tmp_path):
     assert filename == "propioscan-openai-7-dni.csv"
     assert "Vhodni tokeni,1800" in content
     assert "2057 314/4" in content
+
+
+def test_cached_result_does_not_duplicate_historical_openai_usage(tmp_path):
+    store = TrafficStore(tmp_path, retention_days=30, group_secret="secret")
+    now = datetime(2026, 9, 1, 10, tzinfo=timezone.utc)
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_id = "c" * 32
+    _record(store, "cached-request", job_id, "2057 314/4", "192.0.2.3", now)
+    (jobs_dir / f"{job_id}.json").write_text(
+        json.dumps(
+            {
+                "id": job_id,
+                "status": "completed",
+                "updated_at": now.isoformat(),
+                "from_cache": True,
+                "result": {
+                    "openai_usage": {
+                        "configured": True,
+                        "model": "gpt-test",
+                        "calls": 4,
+                        "input_tokens": 2000,
+                        "output_tokens": 300,
+                        "total_tokens": 2300,
+                    },
+                    "documents": [
+                        {
+                            "extraction_warnings": [
+                                "Povzetka z umetno inteligenco ni bilo mogoče pripraviti."
+                            ]
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store.refresh_job_statuses(jobs_dir)
+    summary = store.openai_usage_report(7, now=now)["summary"]
+
+    assert summary["completed_analyses"] == 1
+    assert summary["configured_analyses"] == 0
+    assert summary["ai_analyses"] == 0
+    assert summary["calls"] == 0
+    assert summary["total_tokens"] == 0
+    assert summary["failures"] == 0

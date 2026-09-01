@@ -14,7 +14,16 @@ from typing import Any
 from urllib.parse import urlsplit
 
 
-GROUP_BY_VALUES = {"none", "visitor", "technical", "ip", "parcel", "device", "day", "status"}
+GROUP_BY_VALUES = {
+    "none",
+    "visitor",
+    "technical",
+    "ip",
+    "parcel",
+    "device",
+    "day",
+    "status",
+}
 STATUS_VALUES = {"queued", "running", "completed", "failed"}
 OPENAI_USAGE_COLUMNS = {
     "openai_usage_synced": "INTEGER NOT NULL DEFAULT 0",
@@ -191,9 +200,7 @@ class TrafficStore:
         if status not in STATUS_VALUES:
             return
         timestamp = (
-            updated_at
-            if isinstance(updated_at, str)
-            else _utc(updated_at).isoformat()
+            updated_at if isinstance(updated_at, str) else _utc(updated_at).isoformat()
         )
         with self._connect() as connection:
             connection.execute(
@@ -224,11 +231,15 @@ class TrafficStore:
                 if status not in STATUS_VALUES:
                     continue
                 result = item.get("result") if isinstance(item, dict) else None
-                usage = result.get("openai_usage", {}) if isinstance(result, dict) else {}
+                from_cache = bool(item.get("from_cache"))
+                usage = (
+                    result.get("openai_usage", {})
+                    if isinstance(result, dict) and not from_cache
+                    else {}
+                )
                 terminal = status in {"completed", "failed"}
-                should_update = (
-                    updated_at > row["status_updated_at"]
-                    or (terminal and not row["openai_usage_synced"])
+                should_update = updated_at > row["status_updated_at"] or (
+                    terminal and not row["openai_usage_synced"]
                 )
                 if not should_update:
                     continue
@@ -248,7 +259,7 @@ class TrafficStore:
                             usage.get("rate_limit_remaining_tokens")
                         ),
                         str(usage.get("rate_limit_reset") or "")[:100] or None,
-                        _openai_failure_count(result),
+                        0 if from_cache else _openai_failure_count(result),
                         row["job_id"],
                     )
                 )
@@ -449,7 +460,13 @@ class TrafficStore:
         output = io.StringIO(newline="")
         if group_by != "none":
             groups = self._groups(rows, group_by)
-            fields = ["group_by", "group", "request_count", "unique_ips", "last_request"]
+            fields = [
+                "group_by",
+                "group",
+                "request_count",
+                "unique_ips",
+                "last_request",
+            ]
             writer = csv.DictWriter(output, fieldnames=fields)
             writer.writeheader()
             for group in groups:
@@ -560,7 +577,11 @@ class TrafficStore:
 
     def _technical_group(self, ip_address: str, user_agent: str) -> str:
         digest = hashlib.sha256(
-            self.group_secret + b"\0" + ip_address.encode() + b"\0" + user_agent.encode()
+            self.group_secret
+            + b"\0"
+            + ip_address.encode()
+            + b"\0"
+            + user_agent.encode()
         ).hexdigest()
         return f"T-{digest[:12]}"
 
@@ -728,7 +749,9 @@ def _filter_date(value: str, *, end: bool) -> str:
     if len(candidate) == 10:
         return f"{candidate}T{'23:59:59.999999' if end else '00:00:00'}+00:00"
     try:
-        return _utc(datetime.fromisoformat(candidate.replace("Z", "+00:00"))).isoformat()
+        return _utc(
+            datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+        ).isoformat()
     except ValueError:
         return "9999-12-31T23:59:59+00:00" if end else "0001-01-01T00:00:00+00:00"
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .errors import CheckerError
 from .models import JobStatus, JobView, SearchResult
+from .result_cache import ParcelResultCache
 from .service import ParcelSearchService
 
 
@@ -29,6 +30,7 @@ class JobManager:
         base_dir: Path | None = None,
         python_executable: str | None = None,
         retention_days: int = 30,
+        result_cache_days: int = 7,
     ) -> None:
         self.service = service
         self.executor = ThreadPoolExecutor(
@@ -42,14 +44,45 @@ class JobManager:
         self.base_dir = base_dir or Path.cwd()
         self.python_executable = python_executable
         self.retention = timedelta(days=max(1, retention_days))
+        self.result_cache = (
+            ParcelResultCache(data_dir, retention_days=result_cache_days)
+            if data_dir is not None
+            else None
+        )
         if self._jobs_dir is not None:
             self._jobs_dir.mkdir(parents=True, exist_ok=True)
         if self._worker_log is not None:
             self._worker_log.parent.mkdir(parents=True, exist_ok=True)
 
-    def submit(self, parcel_number: str) -> JobView:
+    def submit(self, parcel_number: str, *, force_refresh: bool = False) -> JobView:
         self.purge_expired()
         now = datetime.now(timezone.utc)
+        cached = None
+        if self.result_cache is not None and not force_refresh:
+            try:
+                cached = self.result_cache.get(parcel_number)
+            except Exception:
+                logger.exception(
+                    "Could not read the parcel result cache; starting a fresh job"
+                )
+        if cached is not None:
+            job = JobView(
+                id=uuid.uuid4().hex,
+                status=JobStatus.completed,
+                progress=100,
+                message="Prikazana je shranjena analiza.",
+                parcel_number=parcel_number,
+                created_at=now,
+                updated_at=now,
+                result=cached.result,
+                from_cache=True,
+                cache_stored_at=cached.stored_at,
+                cache_expires_at=cached.expires_at,
+            )
+            with self._lock:
+                self._jobs[job.id] = job
+                self._persist_locked(job)
+            return job.model_copy(deep=True)
         job = JobView(
             id=uuid.uuid4().hex,
             status=JobStatus.queued,
@@ -71,9 +104,15 @@ class JobManager:
     def purge_expired(self, now: datetime | None = None) -> int:
         """Remove completed or failed disk-backed results after the retention limit."""
 
+        checked_at = now or datetime.now(timezone.utc)
+        if self.result_cache is not None:
+            try:
+                self.result_cache.purge(now=checked_at)
+            except Exception:
+                logger.exception("Could not purge expired parcel cache entries")
         if self._jobs_dir is None:
             return 0
-        cutoff = (now or datetime.now(timezone.utc)) - self.retention
+        cutoff = checked_at - self.retention
         removed = 0
         for path in self._jobs_dir.glob("*.json"):
             try:
@@ -159,6 +198,13 @@ class JobManager:
                 parcel_number,
                 lambda progress, message: self._update(job_id, progress, message),
             )
+            if self.result_cache is not None:
+                try:
+                    self.result_cache.put(parcel_number, result)
+                except Exception:
+                    logger.exception(
+                        "Could not cache the completed parcel result for job %s", job_id
+                    )
             with self._lock:
                 job = self._jobs[job_id]
                 job.status = JobStatus.completed

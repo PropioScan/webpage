@@ -9,6 +9,8 @@ from app.privacy import PrivacyEventStore
 
 
 def test_privacy_event_request_requires_explicit_analytics_consent():
+    assert SearchRequest(parcel_number="2057 314/4").force_refresh is False
+
     with pytest.raises(ValidationError):
         PrivacyEventRequest(
             event_type="parcel_search",

@@ -28,6 +28,7 @@ def main() -> int:
         execution_mode="thread",
         base_dir=settings.base_dir,
         retention_days=settings.job_retention_days,
+        result_cache_days=settings.result_cache_days,
     )
     try:
         job = manager.run_persisted(args.job_id)

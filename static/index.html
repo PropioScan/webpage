@@ -70,7 +70,7 @@
       }
     </script>
     <link rel="stylesheet" href="/static/styles.css">
-    <script src="/static/app.js?v=3" defer></script>
+    <script src="/static/app.js?v=4" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -187,6 +187,15 @@
               </div>
               <a class="source-link" href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener noreferrer">Odpri GURS <span>↗</span></a>
             </div>
+
+            <aside id="cache-notice" class="cache-notice" role="status" aria-live="polite" hidden>
+              <span class="cache-notice-icon" aria-hidden="true">↻</span>
+              <div class="cache-notice-copy">
+                <strong>Prikazani so shranjeni podatki</strong>
+                <p id="cache-notice-text">Ta analiza je bila že pripravljena in je lahko stara do 7 dni.</p>
+              </div>
+              <button id="cache-refresh" type="button">Preveri znova z aktualnimi viri</button>
+            </aside>
 
             <nav id="result-tabs" class="result-tabs" aria-label="Področja rezultatov" role="tablist">
               <button id="result-tab-overview" class="is-active" type="button" role="tab" aria-selected="true" aria-controls="result-panel-overview" data-result-tab="overview">Hitri pregled parcele</button>
@@ -469,7 +478,7 @@
         </section>
         <section>
           <h3>2. Katere podatke obdelujemo</h3>
-          <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani.</p>
+          <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani. Zaključeno analizo parcele brez podatkov o obiskovalcu lahko največ 7 dni ponovno uporabimo za hitrejši odgovor; ob rezultatu je to jasno označeno in vedno je na voljo nov pregled aktualnih virov.</p>
           <p>Za skrbniški pregled lahko iz IP-ja in uporabniškega agenta izračunamo kratko tehnično oznako skupine <code>T-*</code>. To je le približek: več oseb lahko uporablja isto oznako, ista oseba pa lahko uporablja več oznak. Oznake ne uporabljamo za avtomatizirano odločanje ali oglaševanje.</p>
           <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve. Šele po istem soglasju se lahko naloži Google Analytics 4, ki prejme podatke o ogledu strani, približni državi, napravi, brskalniku, napotitvi in nadzorovanih dogodkih, kot so začetek ali zaključek analize, odprt rezultatni zavihek in prenos poročila. V dogodke za Google ne vključimo parcelne oznake, ID-ja opravila, vsebine dokumentov ali besedila napake.</p>
           <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
@@ -498,6 +507,7 @@
             <li>analitična piškotka Google Analytics 4: največ 90 dni; dogodkovni podatki v storitvi Google Analytics največ 2 meseca;</li>
             <li>operativni zapisi zahtev z IP-jem in tehničnimi podatki: največ 30 dni;</li>
             <li>rezultati zaključenega ali neuspelega opravila: največ 30 dni;</li>
+            <li>ponovno uporabljena zaključena analiza parcele: največ 7 dni od uspešnega pregleda;</li>
             <li>neuspešni poskusi skrbniške prijave: največ 24 ur;</li>
             <li>skrbniška seja: največ 8 ur oziroma do odjave;</li>
             <li>predpomnjeni uradni dokumenti in zemljevidi: niso povezani z analitičnim ID-jem in se hranijo za učinkovito ponovno uporabo.</li>

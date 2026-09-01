@@ -53,6 +53,7 @@ class Settings:
     job_execution_mode: str = "thread"
     job_python_executable: str | None = None
     job_retention_days: int = 30
+    result_cache_days: int = 7
     traffic_retention_days: int = 30
     traffic_group_secret: str = ""
     admin_username: str | None = None
@@ -71,9 +72,7 @@ class Settings:
     def google_analytics_configured(self) -> bool:
         return bool(
             self.google_analytics_measurement_id
-            and re.fullmatch(
-                r"G-[A-Z0-9]{6,20}", self.google_analytics_measurement_id
-            )
+            and re.fullmatch(r"G-[A-Z0-9]{6,20}", self.google_analytics_measurement_id)
         )
 
     @property
@@ -114,6 +113,7 @@ class Settings:
             job_execution_mode=job_execution_mode,
             job_python_executable=os.getenv("JOB_PYTHON_EXECUTABLE") or None,
             job_retention_days=max(1, _int("JOB_RETENTION_DAYS", 30)),
+            result_cache_days=max(1, _int("RESULT_CACHE_DAYS", 7)),
             http_timeout_seconds=max(5.0, _float("HTTP_TIMEOUT_SECONDS", 60.0)),
             max_archive_bytes=max(1, _int("MAX_ARCHIVE_MB", 500)) * 1024 * 1024,
             max_pdf_bytes=max(1, _int("MAX_PDF_MB", 500)) * 1024 * 1024,
@@ -133,12 +133,10 @@ class Settings:
             admin_session_secret=os.getenv("ADMIN_SESSION_SECRET") or None,
             admin_session_hours=max(1, _int("ADMIN_SESSION_HOURS", 8)),
             google_analytics_measurement_id=(
-                os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "").strip().upper()
-                or None
+                os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "").strip().upper() or None
             ),
             google_analytics_property_id=(
-                os.getenv("GOOGLE_ANALYTICS_PROPERTY_ID", "").strip()
-                or None
+                os.getenv("GOOGLE_ANALYTICS_PROPERTY_ID", "").strip() or None
             ),
             google_analytics_credentials_file=(
                 analytics_credentials_file.resolve()
@@ -156,6 +154,7 @@ class Settings:
             self.data_dir / "map_previews",
             self.data_dir / "privacy",
             self.data_dir / "jobs",
+            self.data_dir / "result_cache",
             self.data_dir / "logs",
             self.data_dir / "traffic",
         ):

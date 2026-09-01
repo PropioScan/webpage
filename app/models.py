@@ -239,6 +239,7 @@ class SearchRequest(BaseModel):
     captcha_token: str | None = Field(default=None, max_length=2048)
     analytics_consent: bool = False
     consent_version: Literal["1.2"] | None = None
+    force_refresh: bool = False
 
 
 class AdminLoginRequest(BaseModel):
@@ -271,3 +272,6 @@ class JobView(BaseModel):
     updated_at: datetime
     result: SearchResult | None = None
     error: str | None = None
+    from_cache: bool = False
+    cache_stored_at: datetime | None = None
+    cache_expires_at: datetime | None = None

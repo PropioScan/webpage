@@ -28,7 +28,11 @@ from .ga4 import Ga4ConfigurationError, Ga4QueryError, Ga4Reporter
 from .jobs import JobManager
 from .models import AdminLoginRequest, JobView, PrivacyEventRequest, SearchRequest
 from .privacy import PrivacyEventStore
-from .report import generate_location_report, report_filename, resolve_report_map_preview
+from .report import (
+    generate_location_report,
+    report_filename,
+    resolve_report_map_preview,
+)
 from .service import ParcelSearchService
 from .traffic import RequestFilters, TrafficStore
 
@@ -46,6 +50,7 @@ jobs = JobManager(
     base_dir=settings.base_dir,
     python_executable=settings.job_python_executable,
     retention_days=settings.job_retention_days,
+    result_cache_days=settings.result_cache_days,
 )
 privacy_events = PrivacyEventStore(
     settings.data_dir,
@@ -98,7 +103,7 @@ async def _periodic_privacy_cleanup() -> None:
 
 app = FastAPI(
     title="Propioscan",
-    version="1.6.0",
+    version="1.7.0",
     description="Parcel-focused GURS, PIS, GJI, GeoHub, and eVRD research for Slovenia.",
     lifespan=lifespan,
 )
@@ -116,7 +121,9 @@ async def admin_security_headers(request: Request, call_next):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; "
             "frame-src https://challenges.cloudflare.com; "
@@ -368,12 +375,12 @@ def admin_log_tail(
 
 
 @app.get("/api/admin/analytics", include_in_schema=False)
-def admin_analytics(
-    request: Request, days: int = 30, refresh: bool = False
-) -> dict:
+def admin_analytics(request: Request, days: int = 30, refresh: bool = False) -> dict:
     _require_admin(request)
     if days not in {7, 30, 90}:
-        raise HTTPException(status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni.")
+        raise HTTPException(
+            status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni."
+        )
     if not ga4.configured:
         return {
             "status": "setup_required",
@@ -403,7 +410,9 @@ def admin_analytics(
 def admin_analytics_csv(request: Request, days: int = 30) -> Response:
     _require_admin(request)
     if days not in {7, 30, 90}:
-        raise HTTPException(status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni.")
+        raise HTTPException(
+            status_code=422, detail="Obdobje mora biti 7, 30 ali 90 dni."
+        )
     if not ga4.configured:
         raise HTTPException(
             status_code=503,
@@ -544,7 +553,10 @@ def start_search(
         search_request.analytics_consent and search_request.consent_version == "1.2"
     )
     visitor_id = _visitor_id(propioscan_visitor_id) if analytics_consent else None
-    job = jobs.submit(parcel_reference)
+    job = jobs.submit(
+        parcel_reference,
+        force_refresh=search_request.force_refresh,
+    )
     try:
         traffic.record_request(
             request_id=str(uuid.uuid4()),
@@ -556,10 +568,15 @@ def start_search(
             accept_language=request.headers.get("accept-language"),
             referer=request.headers.get("referer"),
             analytics_consent=analytics_consent,
-            consent_version=search_request.consent_version if analytics_consent else None,
+            consent_version=search_request.consent_version
+            if analytics_consent
+            else None,
         )
+        traffic.update_job_status(job.id, job.status.value, job.updated_at)
     except Exception:
-        logger.exception("Could not record the operational request event for job %s", job.id)
+        logger.exception(
+            "Could not record the operational request event for job %s", job.id
+        )
     response = JSONResponse(
         content=job.model_dump(mode="json"),
         status_code=status.HTTP_202_ACCEPTED,
@@ -594,7 +611,9 @@ def _require_admin(request: Request) -> dict:
     try:
         return admin_auth.verify_session(request.cookies.get(ADMIN_COOKIE))
     except AdminAuthenticationError as exc:
-        raise HTTPException(status_code=401, detail="Skrbniška prijava je potrebna.") from exc
+        raise HTTPException(
+            status_code=401, detail="Skrbniška prijava je potrebna."
+        ) from exc
 
 
 @app.get("/api/search/{job_id}/report", include_in_schema=False)
@@ -610,7 +629,9 @@ def download_location_report(job_id: str) -> Response:
             resolve_report_map_preview(job.result, settings.data_dir),
         )
     except Exception as exc:
-        logger.exception("Could not generate location-information PDF for job %s", job_id)
+        logger.exception(
+            "Could not generate location-information PDF for job %s", job_id
+        )
         raise HTTPException(
             status_code=500,
             detail="PDF-ja z lokacijsko informacijo ni bilo mogoče pripraviti.",

@@ -107,12 +107,20 @@ data/
 ├── ocr/            # optional OCR-enhanced PDFs
 ├── map_previews/   # cached PNG previews of matching official map sheets
 ├── jobs/           # disk-backed analysis results, retained for 30 days
+├── result_cache/   # reusable completed parcel analyses, retained for 7 days
 ├── privacy/        # consent-gated pseudonymous analytics events
 ├── traffic/        # bounded request and login-audit database
 └── logs/           # detached analysis-worker log
 ```
 
-Repeat searches reuse the manifest and downloaded PDFs. Delete a specific act directory and its matching ZIP when you intentionally want a fresh copy. Archive and PDF limits are controlled by `MAX_ARCHIVE_MB` and `MAX_PDF_MB`.
+Repeat searches reuse a completed parcel analysis for seven days, including its
+maps, source findings, and report data. The result page clearly marks a reused
+analysis and offers a fresh check; a successful fresh check replaces the cached
+entry, while a failed refresh leaves the previous entry available. Configure the
+window with `RESULT_CACHE_DAYS`. Source manifests and downloaded PDFs are also
+reused. Delete a specific act directory and its matching ZIP when you
+intentionally want a fresh source copy. Archive and PDF limits are controlled by
+`MAX_ARCHIVE_MB` and `MAX_PDF_MB`.
 
 ## Privacy and cookies
 
