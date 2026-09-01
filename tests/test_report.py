@@ -5,6 +5,7 @@ import pymupdf
 from app import main
 from app.models import (
     ParcelInformation,
+    PlanningCondition,
     PlanningContext,
     PlanningLandUseMap,
     PlanningMapEvidence,
@@ -74,6 +75,41 @@ def test_generated_pdf_handles_a_planning_unit_without_a_subunit():
     document = pymupdf.open(stream=pdf, filetype="pdf")
     text = "\n".join(page.get_text() for page in document)
     assert "EUP ŠE-123" in text
+
+
+def test_section_ten_contains_all_seventeen_planning_condition_descriptions():
+    report_result = result()
+    report_result.planning_conditions = [
+        PlanningCondition(
+            key=f"topic-{index}",
+            title=(
+                "Vrste dopustnih dejavnosti"
+                if index == 1
+                else "Osnovni funkcionalni in oblikovni pogoji"
+                if index == 2
+                else f"Vsebinski sklop {index}"
+            ),
+            description=f"Opis pogoja {index} iz uradnega odloka.",
+            available=True,
+            source_title="Odlok o OPN",
+            source_url="/api/files/1/odlok.pdf",
+            pages=[index],
+        )
+        for index in range(1, 18)
+    ]
+
+    section = build_report_sections(report_result)[9]
+    pdf = generate_location_report(report_result)
+    document = pymupdf.open(stream=pdf, filetype="pdf")
+    text = "\n".join(page.get_text() for page in document)
+    normalized_text = " ".join(text.split())
+
+    assert len(section.fields) == 17
+    assert section.status == "partial"
+    assert section.fields[0].label == "1. Vrste dopustnih dejavnosti"
+    assert "Opis pogoja 17" in section.fields[-1].value
+    assert "VRSTE DOPUSTNIH DEJAVNOSTI" in normalized_text
+    assert "OSNOVNI FUNKCIONALNI IN OBLIKOVNI POGOJI" in normalized_text
 
 
 def test_generated_pdf_embeds_the_planning_drawing_and_legend(tmp_path):

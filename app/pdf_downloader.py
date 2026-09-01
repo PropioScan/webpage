@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import unicodedata
 import zipfile
 from dataclasses import asdict, dataclass
@@ -24,6 +25,8 @@ PIS_DETAIL_URL = (
 )
 PIS_FORM_ID = "skupen_pregled_prostosrkih_aktov_form"
 PIS_DOWNLOAD_BUTTON = f"{PIS_FORM_ID}:prenesi_gradivo_zip_button_id"
+MANIFEST_VERSION = 2
+MAX_NESTED_ZIP_DEPTH = 2
 
 
 @dataclass(frozen=True)
@@ -77,7 +80,13 @@ class PISArchiveDownloader:
                 f"PIS returned an invalid archive for ‘{act.title}’."
             ) from exc
         act_dir.mkdir(parents=True, exist_ok=True)
-        self._atomic_json_write(manifest_path, [asdict(item) for item in documents])
+        self._atomic_json_write(
+            manifest_path,
+            {
+                "version": MANIFEST_VERSION,
+                "documents": [asdict(item) for item in documents],
+            },
+        )
         return documents
 
     def _download_archive(self, act: PISAct, destination: Path) -> None:
@@ -129,57 +138,142 @@ class PISArchiveDownloader:
     def _extract_pdfs(self, archive_path: Path, destination: Path) -> list[CachedPDF]:
         destination.mkdir(parents=True, exist_ok=True)
         results: list[CachedPDF] = []
-        total_uncompressed = 0
+        total_uncompressed = [0]
         with zipfile.ZipFile(archive_path) as archive:
-            for member in archive.infolist():
-                if member.is_dir() or not member.filename.lower().endswith(".pdf"):
-                    continue
-                total_uncompressed += member.file_size
-                if member.file_size > self.settings.max_pdf_bytes:
-                    raise DocumentDownloadError(
-                        f"{PurePosixPath(member.filename).name} exceeds the configured PDF limit."
-                    )
-                if total_uncompressed > self.settings.max_archive_bytes * 2:
-                    raise DocumentDownloadError(
-                        "The expanded PIS archive exceeds the configured safety limit."
-                    )
-                digest = hashlib.sha256()
-                temporary = destination / f".{len(results)}.pdf.part"
+            self._extract_archive_members(
+                archive,
+                archive_path=archive_path,
+                destination=destination,
+                results=results,
+                total_uncompressed=total_uncompressed,
+            )
+        return results
+
+    def _extract_archive_members(
+        self,
+        archive: zipfile.ZipFile,
+        *,
+        archive_path: Path,
+        destination: Path,
+        results: list[CachedPDF],
+        total_uncompressed: list[int],
+        source_prefix: str = "",
+        textual_scope: bool = False,
+        depth: int = 0,
+    ) -> None:
+        for member in archive.infolist():
+            if member.is_dir():
+                continue
+            source_name = f"{source_prefix}{member.filename}"
+            lower_name = member.filename.casefold()
+            if lower_name.endswith(".pdf"):
+                self._extract_pdf_member(
+                    archive,
+                    member,
+                    source_name=source_name,
+                    archive_path=archive_path,
+                    destination=destination,
+                    results=results,
+                    total_uncompressed=total_uncompressed,
+                )
+                continue
+            if (
+                not lower_name.endswith(".zip")
+                or depth >= MAX_NESTED_ZIP_DEPTH
+                or not (textual_scope or "tekstualni_del" in lower_name)
+            ):
+                continue
+            if member.file_size > self.settings.max_archive_bytes:
+                raise DocumentDownloadError(
+                    f"{PurePosixPath(member.filename).name} exceeds the configured nested archive limit."
+                )
+            with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as nested_file:
                 written = 0
-                with archive.open(member) as source, temporary.open("wb") as output:
+                with archive.open(member) as source:
                     while chunk := source.read(1024 * 1024):
                         written += len(chunk)
-                        if written > self.settings.max_pdf_bytes:
+                        if written > self.settings.max_archive_bytes:
                             raise DocumentDownloadError(
-                                f"A PDF in {archive_path.name} exceeds the configured limit."
+                                "A nested textual PIS archive exceeds the configured safety limit."
                             )
-                        digest.update(chunk)
-                        output.write(chunk)
-                checksum = digest.hexdigest()
-                local_name = _safe_filename(member.filename, checksum)
-                final_path = destination / local_name
-                if final_path.exists():
-                    temporary.unlink(missing_ok=True)
-                else:
-                    os.replace(temporary, final_path)
-                results.append(
-                    CachedPDF(
-                        source_name=member.filename,
-                        local_name=local_name,
-                        size_bytes=written,
-                        sha256=checksum,
+                        nested_file.write(chunk)
+                nested_file.seek(0)
+                try:
+                    with zipfile.ZipFile(nested_file) as nested_archive:
+                        self._extract_archive_members(
+                            nested_archive,
+                            archive_path=archive_path,
+                            destination=destination,
+                            results=results,
+                            total_uncompressed=total_uncompressed,
+                            source_prefix=f"{source_name}::",
+                            textual_scope=True,
+                            depth=depth + 1,
+                        )
+                except zipfile.BadZipFile as exc:
+                    raise DocumentDownloadError(
+                        f"Nested textual archive {PurePosixPath(member.filename).name} is invalid."
+                    ) from exc
+
+    def _extract_pdf_member(
+        self,
+        archive: zipfile.ZipFile,
+        member: zipfile.ZipInfo,
+        *,
+        source_name: str,
+        archive_path: Path,
+        destination: Path,
+        results: list[CachedPDF],
+        total_uncompressed: list[int],
+    ) -> None:
+        total_uncompressed[0] += member.file_size
+        if member.file_size > self.settings.max_pdf_bytes:
+            raise DocumentDownloadError(
+                f"{PurePosixPath(member.filename).name} exceeds the configured PDF limit."
+            )
+        if total_uncompressed[0] > self.settings.max_archive_bytes * 2:
+            raise DocumentDownloadError(
+                "The expanded PIS archive exceeds the configured safety limit."
+            )
+        digest = hashlib.sha256()
+        temporary = destination / f".{len(results)}.pdf.part"
+        written = 0
+        with archive.open(member) as source, temporary.open("wb") as output:
+            while chunk := source.read(1024 * 1024):
+                written += len(chunk)
+                if written > self.settings.max_pdf_bytes:
+                    raise DocumentDownloadError(
+                        f"A PDF in {archive_path.name} exceeds the configured limit."
                     )
-                )
-        return results
+                digest.update(chunk)
+                output.write(chunk)
+        checksum = digest.hexdigest()
+        local_name = _safe_filename(member.filename, checksum)
+        final_path = destination / local_name
+        if final_path.exists():
+            temporary.unlink(missing_ok=True)
+        else:
+            os.replace(temporary, final_path)
+        results.append(
+            CachedPDF(
+                source_name=source_name,
+                local_name=local_name,
+                size_bytes=written,
+                sha256=checksum,
+            )
+        )
 
     @staticmethod
     def _read_manifest(manifest_path: Path, act_dir: Path) -> list[CachedPDF] | None:
         if not manifest_path.exists():
             return None
         try:
-            rows = json.loads(manifest_path.read_text(encoding="utf-8"))
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or payload.get("version") != MANIFEST_VERSION:
+                return None
+            rows = payload["documents"]
             documents = [CachedPDF(**row) for row in rows]
-        except (OSError, ValueError, TypeError):
+        except (KeyError, OSError, ValueError, TypeError):
             return None
         if all((act_dir / item.local_name).is_file() for item in documents):
             return documents

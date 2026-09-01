@@ -91,6 +91,15 @@ def test_location_report_includes_the_planning_drawing_and_legend():
     assert "buildAreaLegend(assessment, planningMap?.legend_url)" in script
 
 
+def test_location_report_renders_seventeen_planning_condition_descriptions():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "result.planning_conditions || []" in script
+    assert "planningConditions.map((condition, index)" in script
+    assert "`${index + 1}. ${condition.title}`" in script
+    assert "Prikazanih je 17 standardiziranih vsebinskih sklopov" in script
+
+
 def test_document_explanations_are_presented_in_slovenian():
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 

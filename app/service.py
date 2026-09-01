@@ -16,6 +16,11 @@ from .models import (
 )
 from .pdf_downloader import PISArchiveDownloader
 from .pdf_parser import PDFParser, find_parcel_mentions
+from .pip_extractor import (
+    PlanningTextSource,
+    extract_planning_conditions,
+    is_textual_planning_document,
+)
 from .pis import PISClient
 from .planning_map import (
     MapDocumentMatch,
@@ -56,6 +61,7 @@ class ParcelSearchService:
         summarizer = ParcelSummarizer(self.settings)
         warnings: list[str] = []
         documents: list[DocumentResult] = []
+        planning_text_sources: list[PlanningTextSource] = []
         map_candidates: list[_MapCandidate] = []
         try:
             parcel = gurs.get_parcel(reference)
@@ -105,6 +111,9 @@ class ParcelSearchService:
                         / str(act.procedure_id)
                         / cached_pdf.local_name
                     )
+                    pdf_download_url = (
+                        f"/api/files/{act.procedure_id}/{cached_pdf.local_name}"
+                    )
                     extraction_warnings: list[str] = []
                     try:
                         pdf_text = parser.extract(path, cached_pdf.sha256)
@@ -112,6 +121,20 @@ class ParcelSearchService:
                         mentions = find_parcel_mentions(
                             pdf_text.pages, reference.parcel_number
                         )
+                        if (
+                            act.preparation_state == "completed"
+                            and is_textual_planning_document(cached_pdf.source_name)
+                        ):
+                            planning_text_sources.append(
+                                PlanningTextSource(
+                                    title=(
+                                        f"{act.title} – "
+                                        f"{Path(cached_pdf.source_name).name}"
+                                    ),
+                                    url=pdf_download_url,
+                                    pages=pdf_text.pages,
+                                )
+                            )
                     except PDFExtractionError as exc:
                         extraction_warnings.append(str(exc))
                         mentions = find_parcel_mentions([], reference.parcel_number)
@@ -126,9 +149,6 @@ class ParcelSearchService:
                         )
                     )
                     extraction_warnings.extend(summary_warnings)
-                    pdf_download_url = (
-                        f"/api/files/{act.procedure_id}/{cached_pdf.local_name}"
-                    )
                     documents.append(
                         DocumentResult(
                             act_id=act.procedure_id,
@@ -169,6 +189,9 @@ class ParcelSearchService:
                             )
                         )
             progress(98, "Preparing the result…")
+            planning_conditions = extract_planning_conditions(
+                planning_text_sources, contexts
+            )
             documents.sort(
                 key=lambda item: (-item.mention_count, item.act_title, item.pdf_title)
             )
@@ -213,6 +236,7 @@ class ParcelSearchService:
                 cultural_heritage=site_result.cultural_heritage,
                 parcel_map=site_result.parcel_map,
                 planning_land_use_map=build_planning_land_use_map(parcel, map_evidence),
+                planning_conditions=planning_conditions,
                 documents=documents,
                 warnings=warnings,
                 openai_usage=summarizer.usage,

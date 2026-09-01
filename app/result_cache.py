@@ -9,6 +9,9 @@ from pathlib import Path
 from .models import SearchResult
 
 
+RESULT_SCHEMA_VERSION = 2
+
+
 @dataclass(frozen=True)
 class CachedParcelResult:
     result: SearchResult
@@ -139,7 +142,9 @@ def _normalize_reference(parcel_reference: str) -> str:
 
 def _cache_key(parcel_reference: str) -> str:
     return hashlib.sha256(
-        _normalize_reference(parcel_reference).encode("utf-8")
+        f"v{RESULT_SCHEMA_VERSION}:{_normalize_reference(parcel_reference)}".encode(
+            "utf-8"
+        )
     ).hexdigest()
 
 

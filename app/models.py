@@ -215,6 +215,16 @@ class DocumentResult(BaseModel):
     extraction_warnings: list[str] = Field(default_factory=list)
 
 
+class PlanningCondition(BaseModel):
+    key: str
+    title: str
+    description: str
+    available: bool = False
+    source_title: str | None = None
+    source_url: str | None = None
+    pages: list[int] = Field(default_factory=list)
+
+
 class SearchResult(BaseModel):
     parcel: ParcelInformation
     planning_context: list[PlanningContext] = Field(default_factory=list)
@@ -228,6 +238,7 @@ class SearchResult(BaseModel):
     cultural_heritage: list[SpatialFinding] = Field(default_factory=list)
     parcel_map: ParcelMap | None = None
     planning_land_use_map: PlanningLandUseMap | None = None
+    planning_conditions: list[PlanningCondition] = Field(default_factory=list)
     documents: list[DocumentResult] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     openai_usage: OpenAIUsage = Field(default_factory=OpenAIUsage)

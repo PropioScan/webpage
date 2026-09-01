@@ -594,13 +594,29 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
     ]
     development_use = ", ".join(assessment_codes) if assessment_codes else "namenska raba ni bila strukturirano določena"
 
-    document_fields: list[ReportField] = []
-    for document in result.documents[:8]:
-        findings = "; ".join(item.detail for item in document.important_findings[:3])
-        content = findings or document.summary or "Dokument je na voljo v tehničnem pregledu"
-        document_fields.append(ReportField(document.pdf_title, _clip(content, 700)))
-    if not document_fields:
-        document_fields.append(ReportField("Prostorski izvedbeni pogoji", "Samodejni izvleček ni bil pripravljen"))
+    condition_fields: list[ReportField] = []
+    for index, condition in enumerate(result.planning_conditions, start=1):
+        source = ""
+        if condition.source_title:
+            pages = (
+                f", str. {', '.join(str(page) for page in condition.pages)}"
+                if condition.pages
+                else ""
+            )
+            source = f" Vir: {condition.source_title}{pages}."
+        condition_fields.append(
+            ReportField(
+                f"{index}. {condition.title}",
+                _clip(f"{condition.description}{source}", 900),
+            )
+        )
+    if not condition_fields:
+        condition_fields.append(
+            ReportField(
+                "Prostorski izvedbeni pogoji",
+                "Samodejni izvleček iz besedilnega dela odloka ni bil pripravljen",
+            )
+        )
 
     municipality = parcel.municipality or "občina ni bila določena"
     map_evidence = _report_map_evidence(result)
@@ -690,9 +706,11 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         ReportSection(
             10,
             "PRILOGA: PROSTORSKI IZVEDBENI POGOJI",
-            "partial" if result.documents else "review",
-            tuple(document_fields),
-            "Izvlečki so strojno pripravljena pomoč. Pred uporabo preverite celotno uradno besedilo prostorskega akta in pogoje za konkretni poseg.",
+            "partial"
+            if any(condition.available for condition in result.planning_conditions)
+            else "review",
+            tuple(condition_fields),
+            "Prikazanih je 17 standardiziranih vsebinskih sklopov. Izvlečki so strojno pripravljeni iz besedilnega dela odloka; pred uporabo preverite celotno uradno besedilo in pogoje za konkretni poseg.",
         ),
     )
 

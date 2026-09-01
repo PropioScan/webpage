@@ -537,7 +537,7 @@ function renderOfficialForm(result, jobId) {
   const parcel = result.parcel;
   const contexts = result.planning_context || [];
   const acts = result.planning_acts || [];
-  const documents = result.documents || [];
+  const planningConditions = result.planning_conditions || [];
   const assessment = result.land_use_assessment;
   const planningMap = result.planning_land_use_map;
   const planningDrawing = (planningMap?.evidence || []).find((item) => item.preview_url)
@@ -576,12 +576,13 @@ function renderOfficialForm(result, jobId) {
     ...officialFindingRows("Naravne nevarnosti", result.risks || []),
   ];
   const codes = (assessment?.items || []).map((item) => item.code).filter(Boolean).join(", ") || "namenska raba ni bila strukturirano določena";
-  const documentRows = documents.length
-    ? documents.slice(0, 8).map((documentData) => {
-      const findings = (documentData.important_findings || []).slice(0, 3).map((item) => item.detail).join("; ");
-      return [documentData.pdf_title, findings || documentData.summary || "Dokument je na voljo v tehničnem pregledu"];
+  const conditionRows = planningConditions.length
+    ? planningConditions.map((condition, index) => {
+      const pageLabel = (condition.pages || []).length ? `, str. ${condition.pages.join(", ")}` : "";
+      const source = condition.source_title ? ` Vir: ${condition.source_title}${pageLabel}.` : "";
+      return [`${index + 1}. ${condition.title}`, `${condition.description}${source}`];
     })
-    : [["Prostorski izvedbeni pogoji", "Samodejni izvleček ni bil pripravljen"]];
+    : [["Prostorski izvedbeni pogoji", "Samodejni izvleček iz besedilnega dela odloka ni bil pripravljen"]];
 
   const sections = [
     {
@@ -667,9 +668,9 @@ function renderOfficialForm(result, jobId) {
     {
       number: 10,
       title: "Priloga: prostorski izvedbeni pogoji",
-      status: documents.length ? "partial" : "review",
-      rows: documentRows,
-      hint: "Izvlečki so strojno pripravljena pomoč. Pred uporabo preverite celotno uradno besedilo prostorskega akta.",
+      status: planningConditions.some((condition) => condition.available) ? "partial" : "review",
+      rows: conditionRows,
+      hint: "Prikazanih je 17 standardiziranih vsebinskih sklopov. Izvlečki so strojno pripravljeni iz besedilnega dela odloka; pred uporabo preverite celotno uradno besedilo in pogoje za konkretni poseg.",
     },
   ];
 
