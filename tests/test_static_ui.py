@@ -91,6 +91,17 @@ def test_location_report_includes_the_planning_drawing_and_legend():
     assert "buildAreaLegend(assessment, planningMap?.legend_url)" in script
 
 
+def test_location_report_has_structured_regime_fields_and_map_appendix():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    for label in ("Vrsta režima", "Ime režima", "Pravna podlaga", "Vir", "Geometrija"):
+        assert label in script
+    assert "function buildRegimeMapAttachment" in script
+    assert "legal_regime_overlay_url" in script
+    assert "LINIJE_CESTE_G" in script
+    assert "POLIGONI_LETALISCA_G" in script
+
+
 def test_location_report_renders_seventeen_planning_condition_descriptions():
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 

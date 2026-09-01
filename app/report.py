@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import pymupdf
+import httpx
 
 from .models import (
     LandUseAssessmentItem,
@@ -215,6 +218,8 @@ class _ReportWriter:
         map_image_path: Path | None = None,
         map_evidence: PlanningMapEvidence | None = None,
         legend_items: list[LandUseAssessmentItem] | None = None,
+        regime_map_image_path: Path | None = None,
+        regime_findings: list[SpatialFinding] | None = None,
     ) -> None:
         estimated_height = 47.0
         for field in section.fields:
@@ -282,6 +287,12 @@ class _ReportWriter:
                 legend_items or [],
             )
 
+        if regime_map_image_path:
+            self._regime_map_attachment(
+                regime_map_image_path,
+                regime_findings or [],
+            )
+
         hint_height = 21 + len(hint_lines) * 9
         self._ensure(hint_height + 20)
         hint_fill = PALE_ORANGE if section.status == "review" else PALE_BLUE
@@ -292,6 +303,79 @@ class _ReportWriter:
         for line_index, line in enumerate(hint_lines):
             self._text(LEFT + 48, self.y + 16 + line_index * 9, line, 7.1, color=hint_color)
         self.y = rect.y1 + 20
+
+    def _regime_map_attachment(
+        self,
+        image_path: Path,
+        findings: list[SpatialFinding],
+    ) -> None:
+        pixmap = pymupdf.Pixmap(str(image_path))
+        aspect_ratio = pixmap.height / max(pixmap.width, 1)
+        pixmap = None
+        available_width = CONTENT_WIDTH - 24
+        image_height = min(320.0, available_width * aspect_ratio)
+        image_width = image_height / max(aspect_ratio, 0.01)
+        self._ensure(31 + image_height + 78)
+
+        top = self.y + 8
+        self.page.draw_rect(
+            pymupdf.Rect(LEFT, top, A4_WIDTH - RIGHT, top + 31),
+            color=NAVY_SOFT,
+            fill=NAVY_SOFT,
+            width=0,
+        )
+        self._text(
+            LEFT + 12,
+            top + 20,
+            "GEOMETRIJSKA PRILOGA PRAVNIH REŽIMOV",
+            8,
+            bold=True,
+            color=PAPER,
+        )
+
+        image_top = top + 31
+        image_left = LEFT + (CONTENT_WIDTH - image_width) / 2
+        image_rect = pymupdf.Rect(
+            image_left,
+            image_top,
+            image_left + image_width,
+            image_top + image_height,
+        )
+        self.page.draw_rect(
+            pymupdf.Rect(LEFT, image_top, A4_WIDTH - RIGHT, image_top + image_height),
+            color=LINE,
+            fill=PAPER,
+            width=0.6,
+        )
+        self.page.insert_image(image_rect, filename=str(image_path), keep_proportion=True)
+
+        caption_top = image_top + image_height
+        caption = (
+            "Ortofoto, obris parcele in evidentirane osi oziroma objekti GJI. "
+            "Barvne linije niso uradni izris širine varovalnega pasu; pravno odločilen "
+            "je izvorni sloj in predpis, naveden pri posameznem režimu."
+        )
+        lines = self._wrapped(caption, CONTENT_WIDTH - 24, 6.8)
+        caption_height = 22 + len(lines) * 9
+        self.page.draw_rect(
+            pymupdf.Rect(LEFT, caption_top, A4_WIDTH - RIGHT, caption_top + caption_height),
+            color=LINE,
+            fill=(0.97, 0.98, 0.99),
+            width=0.6,
+        )
+        self._text(LEFT + 12, caption_top + 15, "GURS – ZBIRNI KATASTER GJI", 6.5, bold=True, color=TEAL)
+        for index, line in enumerate(lines):
+            self._text(LEFT + 12, caption_top + 28 + index * 9, line, 6.8, color=MUTED)
+        self.y = caption_top + caption_height + 8
+
+        categories = list(dict.fromkeys(finding.category for finding in findings))
+        if categories:
+            legend = "Prikazani zadetki: " + "; ".join(categories[:8])
+            legend_lines = self._wrapped(legend, CONTENT_WIDTH - 24, 6.8)
+            self._ensure(16 + len(legend_lines) * 9)
+            for index, line in enumerate(legend_lines):
+                self._text(LEFT + 12, self.y + 12 + index * 9, line, 6.8)
+            self.y += 18 + len(legend_lines) * 9
 
     def _planning_map_attachment(
         self,
@@ -470,6 +554,7 @@ class _ReportWriter:
 def generate_location_report(
     result: SearchResult,
     map_preview_path: Path | None = None,
+    regime_map_preview_path: Path | None = None,
 ) -> bytes:
     parcel = result.parcel
     reference = f"{parcel.cadastral_municipality_id} {parcel.parcel_number}"
@@ -478,12 +563,22 @@ def generate_location_report(
     writer.meta(result)
     map_evidence = _report_map_evidence(result) if map_preview_path else None
     legend_items = result.land_use_assessment.items if result.land_use_assessment else []
+    regime_findings = [
+        *result.protected_areas,
+        *result.cultural_heritage,
+        *result.constraints,
+        *result.risks,
+    ]
     for section in build_report_sections(result):
         writer.section(
             section,
             map_image_path=map_preview_path if section.number == 9 else None,
             map_evidence=map_evidence if section.number == 9 else None,
             legend_items=legend_items if section.number == 9 else None,
+            regime_map_image_path=(
+                regime_map_preview_path if section.number == 6 else None
+            ),
+            regime_findings=regime_findings if section.number == 6 else None,
         )
     writer.closing(result)
     return writer.finish()
@@ -513,6 +608,70 @@ def resolve_report_map_preview(result: SearchResult, data_dir: Path) -> Path | N
     ):
         return None
     return candidate
+
+
+def prepare_report_regime_map_preview(
+    result: SearchResult, data_dir: Path
+) -> Path | None:
+    parcel_map = result.parcel_map
+    if parcel_map is None or not parcel_map.legal_regime_overlay_url:
+        return None
+    layer_urls = (
+        (parcel_map.orthophoto_url, False),
+        *((url, True) for url in parcel_map.legal_regime_additional_overlay_urls),
+        (parcel_map.legal_regime_overlay_url, False),
+        (parcel_map.parcel_overlay_url, False),
+    )
+    urls = tuple(url for url, _ in layer_urls)
+    digest = hashlib.sha256("\n".join(urls).encode("utf-8")).hexdigest()[:24]
+    root = Path(data_dir) / "regime_maps"
+    output = root / f"{digest}-v2.png"
+    if output.is_file():
+        return output
+
+    document: pymupdf.Document | None = None
+    temporary = output.with_name(f".{output.stem}.part.png")
+    try:
+        streams: list[bytes] = []
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            for url, reduce_opacity in layer_urls:
+                response = client.get(url, headers={"Accept": "image/*"})
+                response.raise_for_status()
+                content_type = response.headers.get("content-type") or ""
+                has_image_signature = response.content.startswith(
+                    (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")
+                )
+                if not content_type.startswith("image/") and not has_image_signature:
+                    return None
+                stream = response.content
+                if reduce_opacity:
+                    overlay = pymupdf.Pixmap(stream)
+                    if overlay.alpha:
+                        samples = overlay.samples
+                        alpha = bytes(
+                            round(samples[index] * 0.28)
+                            for index in range(overlay.n - 1, len(samples), overlay.n)
+                        )
+                        overlay.set_alpha(alpha)
+                        stream = overlay.tobytes("png")
+                    overlay = None
+                streams.append(stream)
+        root.mkdir(parents=True, exist_ok=True)
+        document = pymupdf.open()
+        page = document.new_page(width=1200, height=760)
+        rect = page.rect
+        for stream in streams:
+            page.insert_image(rect, stream=stream, keep_proportion=False)
+        pixmap = page.get_pixmap(alpha=False)
+        pixmap.save(temporary)
+        os.replace(temporary, output)
+        return output
+    except (httpx.HTTPError, OSError, RuntimeError, ValueError):
+        temporary.unlink(missing_ok=True)
+        return None
+    finally:
+        if document is not None:
+            document.close()
 
 
 def _report_map_evidence(result: SearchResult) -> PlanningMapEvidence | None:
@@ -667,7 +826,7 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
             "PRAVNI REŽIMI",
             "partial",
             tuple(regime_fields),
-            "Navedeni so preseki preverjenih javnih slojev. Odsotnost zadetka ne dokazuje odsotnosti vseh pravnih režimov; pravno podlago potrdi pristojni organ.",
+            "Za vsak zadetek so navedeni vrsta režima, ime, pravna podlaga, vir in geometrijsko razmerje do parcele. Odsotnost zadetka ne dokazuje odsotnosti vseh pravnih režimov; občinske in letališke cone potrdi pristojni organ.",
         ),
         ReportSection(
             7,
@@ -717,14 +876,35 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
 
 def _finding_fields(group: str, findings: list[SpatialFinding]) -> list[ReportField]:
     result: list[ReportField] = []
-    for finding in findings:
-        details = [finding.name]
-        if finding.detail:
-            details.append(finding.detail)
-        if finding.reference:
-            details.append(f"oznaka: {finding.reference}")
-        details.append(f"vir: {finding.source}")
-        result.append(ReportField(f"{group} · {finding.category}", " · ".join(details)))
+    for index, finding in enumerate(findings, start=1):
+        suffix = f" ({group} {index})"
+        result.extend(
+            (
+                ReportField(f"Vrsta režima{suffix}", finding.category),
+                ReportField(f"Ime režima{suffix}", finding.name),
+                ReportField(
+                    f"Pravna podlaga{suffix}",
+                    finding.legal_basis or "V preverjenem sloju ni bila strukturirano navedena",
+                ),
+                ReportField(
+                    f"Vir{suffix}",
+                    " · ".join(
+                        part
+                        for part in (
+                            finding.source,
+                            finding.reference,
+                            finding.detail,
+                        )
+                        if part
+                    ),
+                ),
+                ReportField(
+                    f"Geometrija{suffix}",
+                    finding.geometry_relation
+                    or "Uradni spletni sloj geometrijsko seka območje parcele.",
+                ),
+            )
+        )
     return result
 
 

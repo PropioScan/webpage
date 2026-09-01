@@ -95,6 +95,9 @@ def test_parcel_map_uses_official_orthophoto_and_filtered_overlay():
     ):
         assert layer in result.infrastructure_overlay_url
     assert "LINIJE_CESTE_G" not in result.infrastructure_overlay_url
+    assert result.legal_regime_overlay_url is not None
+    assert "LINIJE_CESTE_G" in result.legal_regime_overlay_url
+    assert "POLIGONI_LETALISCA_G" in result.legal_regime_overlay_url
     assert result.official_viewer_url.endswith("?eid=123456")
 
 
@@ -174,3 +177,110 @@ def test_site_analysis_uses_direct_gji_distance_and_exact_overlay_filter(
     assert [item.name for item in result.protected_areas] == ["Test Natura"]
     assert result.cultural_heritage == []
     assert result.warnings == []
+
+
+def test_historical_gji_shapes_become_structured_legal_regimes(settings: Settings):
+    direct = [
+        _direct_gji("cable-1", 2100, "Infrastruktura za električno energijo", "Kablovod - podzemni kabelski vod"),
+        _direct_gji("telecom-1", 6100, "Infrastruktura za elektronske komunikacije", "Trasa"),
+        _direct_gji("water-1", 3100, "Vodovodna infrastruktura", "Vodooskrbna cev"),
+        _direct_gji("sewer-1", 3200, "Kanalizacijska infrastruktura", "Kanalizacijski vod"),
+        _direct_gji("path-1", 1100, "Cestna infrastruktura", "Cesta - os ceste"),
+    ]
+    lines = [
+        _line_gji(direct[0], [[5, -5], [5, 15]], attr2="0,4 kV"),
+        _line_gji(direct[1], [[12, -5], [12, 15]], attr1="v zemlji"),
+        _line_gji(direct[2], [[4, -5], [4, 15]]),
+        _line_gji(direct[3], [[6, -5], [6, 15]]),
+        _line_gji(direct[4], [[8, -5], [8, 15]], attr1="javna pot"),
+        _line_gji(
+            _direct_gji("regional-1", 1100, "Cestna infrastruktura", "Cesta - os ceste"),
+            [[24, -5], [24, 15]],
+            attr1="regionalna cesta I. reda",
+        ),
+    ]
+    client = SiteAnalysisClient(settings)
+    try:
+        findings = client._gji_regime_findings(parcel(), direct, lines)
+    finally:
+        client.close()
+
+    by_name = {finding.name: finding for finding in findings}
+    cable = by_name["Podzemni kabelski vod 0,4 kV"]
+    assert cable.legal_basis == "112. člen Energetskega zakona (EZ-2)"
+    assert "1 m na vsako stran" in cable.geometry_relation
+    assert cable.reference == "EID GJI cable-1"
+
+    telecom = by_name["Elektronske komunikacije – trasa – v zemlji"]
+    assert telecom.legal_basis == "17. člen Zakona o elektronskih komunikacijah (ZEKom-2)"
+    assert "3 m na vsako stran" in telecom.geometry_relation
+    assert telecom.distance_m == 2
+
+    assert "Vodovod – vodooskrbna cev" in by_name
+    assert "Kanalizacija – kanalizacijski vod" in by_name
+    assert by_name["Javna pot"].category == "Varovalni pas javne ceste"
+    regional = by_name["Regionalna cesta I. reda"]
+    assert regional.distance_m == 14
+    assert "15 m na vsako stran" in regional.geometry_relation
+
+
+def test_radovljica_airport_zone_uses_the_municipal_vector_layer(settings: Settings):
+    test_parcel = parcel()
+    test_parcel.information.municipality = "Radovljica"
+    response_html = """
+        <html><body><table>
+          <tr><td><b>AREA</b></td><td>46570659,6</td></tr>
+          <tr><td><b>LABEL</b></td><td>B</td></tr>
+        </table></body></html>
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["QUERY_LAYERS"] == "Vplivno_obmocje_letalisca"
+        return httpx.Response(200, text=response_html)
+
+    client = SiteAnalysisClient(
+        settings, http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    try:
+        findings = client._query_municipal_regimes(test_parcel)
+    finally:
+        client.close()
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.name == "Vplivno območje letališča ALC Lesce – območje B"
+    assert "64. člen" in finding.legal_basis
+    assert "območju B" in finding.geometry_relation
+    map_result = build_parcel_map(test_parcel)
+    assert len(map_result.legal_regime_additional_overlay_urls) == 1
+    assert "Vplivno_obmocje_letalisca" in map_result.legal_regime_additional_overlay_urls[0]
+
+
+def _direct_gji(eid: str, code: int, theme: str, kind: str) -> dict:
+    return {
+        "EID_GJI": eid,
+        "GJI_TEMATIKE_SIFRA": code,
+        "GJI_TEMATIKE_NAZIV_SL": theme,
+        "GJI_VRSTE_OBJEKTOV_NAZIV_SL": kind,
+    }
+
+
+def _line_gji(
+    direct: dict,
+    coordinates: list[list[float]],
+    *,
+    attr1: str | None = None,
+    attr2: str | None = None,
+) -> dict:
+    properties = {
+        **direct,
+        "EID_LINIJA": direct["EID_GJI"],
+        "GJI_ATR1_NAZIV_SL": attr1,
+        "GJI_ATR2_NAZIV_SL": attr2,
+        "GJI_OPUSCENOSTI_NAZIV_SL": "neopuščeni objekt",
+    }
+    properties.pop("EID_GJI", None)
+    return {
+        "properties": properties,
+        "geometry": {"type": "LineString", "coordinates": coordinates},
+    }

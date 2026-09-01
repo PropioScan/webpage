@@ -30,6 +30,7 @@ from .models import AdminLoginRequest, JobView, PrivacyEventRequest, SearchReque
 from .privacy import PrivacyEventStore
 from .report import (
     generate_location_report,
+    prepare_report_regime_map_preview,
     report_filename,
     resolve_report_map_preview,
 )
@@ -627,6 +628,7 @@ def download_location_report(job_id: str) -> Response:
         pdf = generate_location_report(
             job.result,
             resolve_report_map_preview(job.result, settings.data_dir),
+            prepare_report_regime_map_preview(job.result, settings.data_dir),
         )
     except Exception as exc:
         logger.exception(

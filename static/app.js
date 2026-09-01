@@ -630,7 +630,19 @@ function renderOfficialForm(result, jobId) {
       title: "Pravni režimi",
       status: "partial",
       rows: regimeRows,
-      hint: "Navedeni so preseki preverjenih spletnih slojev. Odsotnost zadetka ne dokazuje odsotnosti vseh pravnih režimov.",
+      mapAttachment: result.parcel_map?.legal_regime_overlay_url
+        ? {
+          type: "regime",
+          parcelMap: result.parcel_map,
+          findings: [
+            ...(result.protected_areas || []),
+            ...(result.cultural_heritage || []),
+            ...(result.constraints || []),
+            ...(result.risks || []),
+          ],
+        }
+        : null,
+      hint: "Za vsak zadetek so navedeni vrsta režima, ime, pravna podlaga, vir in geometrijsko razmerje do parcele. Odsotnost zadetka ne dokazuje odsotnosti vseh pravnih režimov; občinske in letališke cone potrdi pristojni organ.",
     },
     {
       number: 7,
@@ -661,7 +673,7 @@ function renderOfficialForm(result, jobId) {
         ["Kartografska dokazila", `${planningMap?.evidence?.length || 0} najdenih kartografskih listov`],
       ],
       mapAttachment: planningDrawing?.preview_url
-        ? { evidence: planningDrawing, planningMap, assessment }
+        ? { type: "planning", evidence: planningDrawing, planningMap, assessment }
         : null,
       hint: "Za uradno prilogo uporabite grafični izsek, ki ga potrdi občina. Spletni prikaz je namenjen orientaciji.",
     },
@@ -738,9 +750,16 @@ async function downloadLocationReport(event) {
 
 function officialFindingRows(group, findings) {
   if (!findings.length) return [[group, "Preverjeni spletni sloji niso vrnili preseka"]];
-  return findings.map((finding) => {
-    const details = [finding.name, finding.detail, finding.reference && `oznaka: ${finding.reference}`, `vir: ${finding.source}`].filter(Boolean);
-    return [`${group} · ${finding.category}`, details.join(" · ")];
+  return findings.flatMap((finding, index) => {
+    const suffix = ` (${group} ${index + 1})`;
+    const source = [finding.source, finding.reference, finding.detail].filter(Boolean).join(" · ");
+    return [
+      [`Vrsta režima${suffix}`, finding.category],
+      [`Ime režima${suffix}`, finding.name],
+      [`Pravna podlaga${suffix}`, finding.legal_basis || "V preverjenem sloju ni bila strukturirano navedena"],
+      [`Vir${suffix}`, source],
+      [`Geometrija${suffix}`, finding.geometry_relation || "Uradni spletni sloj geometrijsko seka območje parcele."],
+    ];
   });
 }
 
@@ -767,7 +786,11 @@ function officialSection(sectionData) {
   hint.append(element("b", "", "Namig"), element("p", "", sectionData.hint));
   section.append(header, rows);
   if (sectionData.mapAttachment) {
-    section.append(buildOfficialMapAttachment(sectionData.mapAttachment));
+    section.append(
+      sectionData.mapAttachment.type === "regime"
+        ? buildRegimeMapAttachment(sectionData.mapAttachment)
+        : buildOfficialMapAttachment(sectionData.mapAttachment),
+    );
   }
   section.append(hint);
   return section;
@@ -794,6 +817,74 @@ function buildOfficialMapAttachment({ evidence, planningMap, assessment }) {
   return attachment;
 }
 
+function buildRegimeMapAttachment({ parcelMap, findings }) {
+  const attachment = element("figure", "official-map-attachment");
+  const preview = element("div", "official-map-preview regime-map-preview");
+  const frame = element("div", "parcel-map-frame regime-map-frame");
+
+  const orthophoto = element("img", "parcel-map-base");
+  orthophoto.src = parcelMap.orthophoto_url;
+  orthophoto.alt = "Ortofoto GURS na območju parcele";
+  orthophoto.loading = "lazy";
+  const regimes = element("img", "parcel-map-overlay");
+  regimes.src = parcelMap.legal_regime_overlay_url;
+  regimes.alt = "Geometrija evidentirane GJI in javnih cest";
+  regimes.loading = "lazy";
+  frame.append(orthophoto);
+  (parcelMap.legal_regime_additional_overlay_urls || []).forEach((url) => {
+    const additional = element("img", "parcel-map-overlay municipal-regime-overlay");
+    additional.src = url;
+    additional.alt = "Dodatna občinska geometrija pravnega režima";
+    additional.loading = "lazy";
+    frame.append(additional);
+  });
+  frame.append(regimes);
+  const parcel = element("img", "parcel-map-overlay");
+  parcel.src = parcelMap.parcel_overlay_url;
+  parcel.alt = "Obris iskane parcele";
+  parcel.loading = "lazy";
+  frame.append(parcel);
+  preview.append(frame);
+
+  const caption = element("figcaption", "official-map-caption");
+  const copy = element("div", "official-map-caption-copy");
+  copy.append(
+    element("span", "", "Geometrijska priloga · pravni režimi"),
+    element("strong", "", "GURS – Zbirni kataster GJI"),
+    element("p", "", "Prikazane so evidentirane osi in objekti. Linija ni nujno uradni zunanji rob varovalnega pasu; razmerje in zakonska širina sta zapisana pri posameznem režimu."),
+  );
+  caption.append(copy, link(parcelMap.official_viewer_url, "Odpri uradni pregledovalnik ↗", "official-map-source"));
+  attachment.append(preview, caption, buildRegimeLegend(findings));
+  return attachment;
+}
+
+function buildRegimeLegend(findings) {
+  const legend = element("section", "visual-legend parcel-legend");
+  legend.append(element("strong", "visual-legend-title", "Legenda geometrijske priloge"));
+  const items = element("div", "parcel-legend-items");
+  const outline = element("span", "parcel-legend-item");
+  outline.append(element("i", "parcel-outline-swatch"), document.createTextNode("Obris iskane parcele"));
+  const photo = element("span", "parcel-legend-item");
+  photo.append(element("i", "orthophoto-swatch"), document.createTextNode("Ortofoto GURS"));
+  items.append(outline, photo);
+  GJI_REGIME_MAP_LAYERS.forEach((spec) => {
+    const item = element("span", "parcel-legend-item");
+    item.append(element("i", spec.swatch), document.createTextNode(spec.label));
+    items.append(item);
+  });
+  const categories = [...new Set((findings || []).map((finding) => finding.category))];
+  if (categories.includes("Vplivno območje letališča")) {
+    const airportZone = element("span", "parcel-legend-item");
+    airportZone.append(element("i", "airport-zone-swatch"), document.createTextNode("Vplivno območje letališča (občinski sloj)"));
+    items.append(airportZone);
+  }
+  legend.append(items);
+  if (categories.length) {
+    legend.append(element("p", "regime-map-found", `Zadetki za parcelo: ${categories.join("; ")}`));
+  }
+  return legend;
+}
+
 const GJI_MAP_LAYERS = [
   { key: "water", label: "Vodovod", layer: "SI.GURS.KGI:LINIJE_VODOVOD_G", swatch: "gji-water-swatch" },
   { key: "sewer", label: "Kanalizacija", layer: "SI.GURS.KGI:LINIJE_KANALIZACIJA_G", swatch: "gji-sewer-swatch" },
@@ -801,6 +892,12 @@ const GJI_MAP_LAYERS = [
   { key: "telecom", label: "Elektronske komunikacije", layer: "SI.GURS.KGI:LINIJE_ELEKTRONSKE_KOMUNIKACIJE_G", swatch: "gji-telecom-swatch" },
   { key: "gas", label: "Zemeljski plin", layer: "SI.GURS.KGI:LINIJE_ZEMELJSKI_PLIN_G", swatch: "gji-gas-swatch" },
   { key: "heat", label: "Toplotna energija", layer: "SI.GURS.KGI:LINIJE_TOPLOTNA_ENERGIJA_G", swatch: "gji-heat-swatch" },
+];
+
+const GJI_REGIME_MAP_LAYERS = [
+  ...GJI_MAP_LAYERS,
+  { key: "road", label: "Javne ceste", layer: "SI.GURS.KGI:LINIJE_CESTE_G", swatch: "gji-road-swatch" },
+  { key: "airport", label: "Letališka infrastruktura (GJI)", layer: "SI.GURS.KGI:POLIGONI_LETALISCA_G", swatch: "gji-airport-swatch" },
 ];
 
 function renderVisualGallery(parcelMap, planningMap, assessment) {

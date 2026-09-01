@@ -127,6 +127,9 @@ class SpatialFinding(BaseModel):
     category: str
     name: str
     detail: str | None = None
+    legal_basis: str | None = None
+    geometry_relation: str | None = None
+    distance_m: float | None = None
     tone: AssessmentTone = AssessmentTone.caution
     reference: str | None = None
     source: str
@@ -137,6 +140,8 @@ class ParcelMap(BaseModel):
     orthophoto_url: str
     parcel_overlay_url: str
     infrastructure_overlay_url: str | None = None
+    legal_regime_overlay_url: str | None = None
+    legal_regime_additional_overlay_urls: list[str] = Field(default_factory=list)
     official_viewer_url: str
     source: str = "GURS ortofoto in kataster nepremičnin"
     source_url: str = "https://www.e-prostor.gov.si/dostopi/javni-dostop/"

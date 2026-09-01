@@ -10,6 +10,7 @@ from app.models import (
     PlanningLandUseMap,
     PlanningMapEvidence,
     SearchResult,
+    SpatialFinding,
 )
 from app.report import (
     build_report_sections,
@@ -75,6 +76,50 @@ def test_generated_pdf_handles_a_planning_unit_without_a_subunit():
     document = pymupdf.open(stream=pdf, filetype="pdf")
     text = "\n".join(page.get_text() for page in document)
     assert "EUP ŠE-123" in text
+
+
+def test_section_six_uses_requested_legal_regime_columns():
+    report_result = result()
+    report_result.constraints = [
+        SpatialFinding(
+            category="Varovalni pas elektroenergetskega omrežja",
+            name="Podzemni kabelski vod 0,4 kV",
+            legal_basis="112. člen Energetskega zakona (EZ-2)",
+            geometry_relation="Vod seka parcelo; pas 1 m na vsako stran.",
+            reference="EID GJI 123",
+            source="GURS – Zbirni kataster GJI",
+            source_url="https://www.e-prostor.gov.si/",
+        )
+    ]
+
+    section = build_report_sections(report_result)[5]
+    labels = [field.label for field in section.fields]
+    values = [field.value for field in section.fields]
+
+    assert any(label.startswith("Vrsta režima") for label in labels)
+    assert any(label.startswith("Ime režima") for label in labels)
+    assert any(label.startswith("Pravna podlaga") for label in labels)
+    assert any(label.startswith("Vir") for label in labels)
+    assert any(label.startswith("Geometrija") for label in labels)
+    assert "Podzemni kabelski vod 0,4 kV" in values
+    assert "112. člen Energetskega zakona (EZ-2)" in values
+
+
+def test_generated_pdf_embeds_the_legal_regime_map_appendix(tmp_path):
+    preview = tmp_path / "regime.png"
+    image_document = pymupdf.open()
+    image_page = image_document.new_page(width=640, height=390)
+    image_page.draw_rect(image_page.rect, color=(0.2, 0.5, 0.3), fill=(0.91, 0.95, 0.9))
+    image_page.draw_line((80, 80), (540, 310), color=(0.8, 0.15, 0.12), width=8)
+    image_page.get_pixmap().save(preview)
+    image_document.close()
+
+    pdf = generate_location_report(result(), regime_map_preview_path=preview)
+    document = pymupdf.open(stream=pdf, filetype="pdf")
+    text = "\n".join(page.get_text() for page in document)
+
+    assert "GEOMETRIJSKA PRILOGA PRAVNIH REŽIMOV" in text
+    assert sum(len(page.get_images(full=True)) for page in document) >= 1
 
 
 def test_section_ten_contains_all_seventeen_planning_condition_descriptions():

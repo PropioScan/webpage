@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+from lxml import html
 from shapely.errors import GEOSException
 from shapely.geometry import LineString, MultiLineString, MultiPoint, Point, Polygon, shape
 from shapely.geometry.base import BaseGeometry
@@ -57,6 +58,14 @@ INFRASTRUCTURE_SPECS = (
     ),
 )
 ROAD_SPEC = InfrastructureSpec("road", "Cesta", "LINIJE_CESTE_G")
+
+GJI_SOURCE = "GURS – Zbirni kataster gospodarske javne infrastrukture"
+GJI_SOURCE_URL = (
+    "https://www.e-prostor.gov.si/podrocja/"
+    "gospodarska-javna-infrastruktura/zbirni-kataster-gji/"
+)
+RADOVLJICA_WMS_URL = "https://gis.iobcina.si/wms_vektor/radovljica"
+RADOVLJICA_AIRPORT_LAYER = "Vplivno_obmocje_letalisca"
 
 
 @dataclass(frozen=True)
@@ -320,12 +329,18 @@ class SiteAnalysisClient:
         infrastructure: list[InfrastructureStatus] = []
         nearest_results: dict[str, float | None | CheckerError] = {}
         spatial_results: dict[SpatialLayerSpec, list[SpatialFinding] | CheckerError] = {}
+        gji_line_result: list[dict[str, Any]] | CheckerError
+        municipal_regime_result: list[SpatialFinding] | CheckerError
         all_line_specs = (*INFRASTRUCTURE_SPECS, ROAD_SPEC)
-        with ThreadPoolExecutor(max_workers=12) as executor:
+        with ThreadPoolExecutor(max_workers=14) as executor:
             line_futures = {
                 spec: executor.submit(self._nearest_line_distance, parcel, spec)
                 for spec in all_line_specs
             }
+            gji_line_future = executor.submit(self._query_detailed_gji_lines, parcel)
+            municipal_regime_future = executor.submit(
+                self._query_municipal_regimes, parcel
+            )
             spatial_futures = {
                 spec: executor.submit(self._query_spatial_layer, parcel, spec)
                 for spec in SPATIAL_LAYERS
@@ -340,6 +355,14 @@ class SiteAnalysisClient:
                     spatial_results[spec] = future.result()
                 except CheckerError as exc:
                     spatial_results[spec] = exc
+            try:
+                gji_line_result = gji_line_future.result()
+            except CheckerError as exc:
+                gji_line_result = exc
+            try:
+                municipal_regime_result = municipal_regime_future.result()
+            except CheckerError as exc:
+                municipal_regime_result = exc
 
         for spec in INFRASTRUCTURE_SPECS:
             matching = [
@@ -401,6 +424,27 @@ class SiteAnalysisClient:
                         "ni bilo mogoče preveriti."
                     )
                     failed_sources.add(failure_key)
+
+        if isinstance(gji_line_result, CheckerError):
+            grouped["constraint"].extend(
+                self._gji_regime_findings(parcel, direct_records, [])
+            )
+            warnings.append(
+                "Podrobnega sloja GJI za izračun varovalnih pasov ni bilo mogoče "
+                "preveriti; prikazani so le objekti, ki jih GURS neposredno povezuje s parcelo."
+            )
+        else:
+            grouped["constraint"].extend(
+                self._gji_regime_findings(parcel, direct_records, gji_line_result)
+            )
+
+        if isinstance(municipal_regime_result, CheckerError):
+            if self._supports_municipal_regimes(parcel):
+                warnings.append(
+                    "Občinskega sloja vplivnega območja letališča ni bilo mogoče preveriti."
+                )
+        else:
+            grouped["constraint"].extend(municipal_regime_result)
 
         if self._is_affirmative(parcel.information.restriction_recorded):
             grouped["constraint"].append(
@@ -492,6 +536,399 @@ class SiteAnalysisClient:
         nearest = min(distances)
         return round(nearest, 1) if nearest <= 100 else None
 
+    def _query_detailed_gji_lines(
+        self, parcel: GURSParcel
+    ) -> list[dict[str, Any]]:
+        min_x, min_y, max_x, max_y = parcel.bbox
+        # The widest nationally prescribed band queried here is the 65 m gas
+        # transmission-system band. A small margin avoids boundary rounding loss.
+        search_distance = 70
+        cql = (
+            "BBOX(GEOM,"
+            f"{min_x - search_distance},{min_y - search_distance},"
+            f"{max_x + search_distance},{max_y + search_distance},'EPSG:3794') "
+            "AND GJI_TEMATIKE_SIFRA IN (1100,2100,2200,2300,3100,3200,6100)"
+        )
+        params = wfs_params("SI.GURS.KGI:LINIJE", cql_filter=cql)
+        result: list[dict[str, Any]] = []
+        for start_index in (0, 300, 600):
+            params["startIndex"] = start_index
+            payload = self.http.get_json(KGI_WFS_URL, params)
+            features = payload.get("features") or []
+            result.extend(
+                feature
+                for feature in features
+                if feature.get("properties") and feature.get("geometry")
+            )
+            if len(features) < 300:
+                break
+        return result
+
+    def _query_municipal_regimes(
+        self, parcel: GURSParcel
+    ) -> list[SpatialFinding]:
+        if not self._supports_municipal_regimes(parcel):
+            return []
+        min_x, min_y, max_x, max_y = _map_bbox(parcel.bbox, 1.0)
+        params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetFeatureInfo",
+            "CRS": "EPSG:3794",
+            "BBOX": f"{min_x},{min_y},{max_x},{max_y}",
+            "WIDTH": 501,
+            "HEIGHT": 501,
+            "LAYERS": RADOVLJICA_AIRPORT_LAYER,
+            "QUERY_LAYERS": RADOVLJICA_AIRPORT_LAYER,
+            "INFO_FORMAT": "text/plain",
+            "I": 250,
+            "J": 250,
+            "FEATURE_COUNT": 10,
+            "STYLES": "",
+        }
+        response = self.http.request("GET", RADOVLJICA_WMS_URL, params=params)
+        try:
+            document = html.fromstring(response.content)
+        except (TypeError, ValueError) as exc:
+            raise UpstreamServiceError(
+                "The municipal airport-regime response was unreadable."
+            ) from exc
+        label: str | None = None
+        for row in document.xpath("//tr"):
+            cells = [
+                " ".join(cell.text_content().split())
+                for cell in row.xpath("./th|./td")
+            ]
+            if len(cells) >= 2 and cells[0].casefold() == "label":
+                label = cells[1].strip().upper()
+                break
+        if not label:
+            return []
+        return [
+            SpatialFinding(
+                category="Vplivno območje letališča",
+                name=f"Vplivno območje letališča ALC Lesce – območje {label}",
+                legal_basis=(
+                    "64. člen Odloka o Prostorskem redu občine Radovljica "
+                    "in Zakon o letalstvu (ZLet-1)"
+                ),
+                geometry_relation=(
+                    f"Središčna točka parcele je v občinskem vektorskem sloju "
+                    f"evidentirana v območju {label}. Mejo cone prikazuje geometrijska priloga."
+                ),
+                tone=AssessmentTone.concern,
+                reference=f"cona {label}",
+                source="Občina Radovljica / iObčina – Vplivno območje letališča",
+                source_url=RADOVLJICA_WMS_URL,
+            )
+        ]
+
+    @staticmethod
+    def _supports_municipal_regimes(parcel: GURSParcel) -> bool:
+        return (parcel.information.municipality or "").strip().casefold() == "radovljica"
+
+    def _gji_regime_findings(
+        self,
+        parcel: GURSParcel,
+        direct_records: list[dict[str, Any]],
+        line_features: list[dict[str, Any]],
+    ) -> list[SpatialFinding]:
+        parcel_shape = shape(parcel.geometry)
+        direct_eids = {
+            str(record.get("EID_GJI"))
+            for record in direct_records
+            if record.get("EID_GJI") is not None
+        }
+        candidates: list[tuple[SpatialFinding, str]] = []
+        matched_direct_eids: set[str] = set()
+
+        for feature in line_features:
+            properties = feature.get("properties") or {}
+            if self._is_abandoned_gji(properties):
+                continue
+            geometry = feature.get("geometry")
+            try:
+                line_shape = shape(geometry)
+                distance = float(parcel_shape.distance(line_shape))
+            except (GEOSException, TypeError, ValueError):
+                continue
+            eid = self._gji_eid(properties)
+            direct = bool(eid and eid in direct_eids) or distance <= 0.5
+            profile = self._gji_regime_profile(properties)
+            if profile is None:
+                continue
+            category, name, legal_basis, width = profile
+            if not direct and (width is None or distance > width):
+                continue
+            if eid and eid in direct_eids:
+                matched_direct_eids.add(eid)
+            candidates.append(
+                (
+                    SpatialFinding(
+                        category=category,
+                        name=name,
+                        detail=self._gji_detail(properties, width),
+                        legal_basis=legal_basis,
+                        geometry_relation=self._gji_geometry_relation(
+                            direct=direct,
+                            distance=distance,
+                            width=width,
+                            has_geometry=True,
+                        ),
+                        distance_m=round(distance, 1),
+                        tone=AssessmentTone.concern,
+                        reference=f"EID GJI {eid}" if eid else None,
+                        source=GJI_SOURCE,
+                        source_url=GJI_SOURCE_URL,
+                    ),
+                    eid or "",
+                )
+            )
+
+        # Point/polygon parcel-relation records, or line records that could not be
+        # joined to the detailed line layer, are still valid evidence of GJI on the
+        # parcel. Their protection-band width is deliberately not invented.
+        for properties in direct_records:
+            eid = self._gji_eid(properties)
+            if eid and eid in matched_direct_eids:
+                continue
+            profile = self._gji_regime_profile(properties)
+            if profile is None:
+                continue
+            category, name, legal_basis, width = profile
+            candidates.append(
+                (
+                    SpatialFinding(
+                        category=category,
+                        name=name,
+                        detail=self._gji_detail(properties, width),
+                        legal_basis=legal_basis,
+                        geometry_relation=self._gji_geometry_relation(
+                            direct=True,
+                            distance=0,
+                            width=width,
+                            has_geometry=False,
+                        ),
+                        distance_m=0,
+                        tone=AssessmentTone.concern,
+                        reference=f"EID GJI {eid}" if eid else None,
+                        source=GJI_SOURCE,
+                        source_url=GJI_SOURCE_URL,
+                    ),
+                    eid or "",
+                )
+            )
+
+        grouped: dict[tuple[str, str, str | None], list[tuple[SpatialFinding, str]]] = {}
+        for finding, eid in candidates:
+            grouped.setdefault(
+                (finding.category, finding.name, finding.legal_basis), []
+            ).append((finding, eid))
+
+        findings: list[SpatialFinding] = []
+        for entries in grouped.values():
+            entries.sort(key=lambda item: item[0].distance_m or 0)
+            finding = entries[0][0].model_copy(deep=True)
+            eids = list(dict.fromkeys(eid for _, eid in entries if eid))
+            if eids:
+                shown = ", ".join(eids[:3])
+                suffix = f" (+{len(eids) - 3})" if len(eids) > 3 else ""
+                finding.reference = f"EID GJI {shown}{suffix}"
+            findings.append(finding)
+        return sorted(findings, key=lambda item: (item.category, item.name))
+
+    @classmethod
+    def _gji_regime_profile(
+        cls, properties: dict[str, Any]
+    ) -> tuple[str, str, str, float | None] | None:
+        key = cls._infrastructure_key(properties)
+        if key is None:
+            return None
+        kind = cls._clean_value(
+            properties.get("GJI_VRSTE_OBJEKTOV_NAZIV_SL")
+        ) or {
+            "road": "Javna cesta",
+            "electricity": "Elektroenergetski vod ali objekt",
+            "telecom": "Elektronska komunikacijska infrastruktura",
+            "water": "Vodovodno omrežje",
+            "sewer": "Kanalizacijsko omrežje",
+            "gas": "Plinovodno omrežje",
+            "district_heat": "Omrežje daljinskega ogrevanja",
+        }.get(key, "Gospodarska javna infrastruktura")
+        attr1 = cls._clean_gji_attribute(properties.get("GJI_ATR1_NAZIV_SL"))
+        attr2 = cls._clean_gji_attribute(properties.get("GJI_ATR2_NAZIV_SL"))
+        combined = " ".join(part for part in (kind, attr1, attr2) if part).lower()
+
+        if key == "electricity":
+            voltage = attr2 if attr2 and "kv" in attr2.lower() else None
+            underground = "podzem" in combined or "kablovod" in combined
+            overhead = "nadzem" in combined or "daljnovod" in combined
+            if underground:
+                name = f"Podzemni kabelski vod{f' {voltage}' if voltage else ''}"
+            elif overhead:
+                name = f"Nadzemni elektroenergetski vod{f' {voltage}' if voltage else ''}"
+            else:
+                name = kind
+            return (
+                "Varovalni pas elektroenergetskega omrežja",
+                name,
+                "112. člen Energetskega zakona (EZ-2)",
+                cls._electricity_band_width(combined, voltage),
+            )
+        if key == "telecom":
+            position = f" – {attr1.lower()}" if attr1 else ""
+            return (
+                "Varovalni pas elektronskih komunikacij",
+                f"Elektronske komunikacije – {kind.lower()}{position}",
+                "17. člen Zakona o elektronskih komunikacijah (ZEKom-2)",
+                3.0,
+            )
+        if key == "water":
+            return (
+                "Varovalni pas vodovodnega omrežja",
+                f"Vodovod – {kind.lower()}",
+                "Veljavni občinski prostorski akt in pogoji upravljavca vodovoda",
+                None,
+            )
+        if key == "sewer":
+            return (
+                "Varovalni pas kanalizacijskega omrežja",
+                f"Kanalizacija – {kind.lower()}",
+                "Veljavni občinski prostorski akt in pogoji upravljavca kanalizacije",
+                None,
+            )
+        if key == "road":
+            road_class = attr1 or kind
+            width = cls._road_band_width(road_class)
+            legal_basis = (
+                "76. člen Zakona o cestah (ZCes-2)"
+                if width is not None
+                else "Zakon o cestah (ZCes-2) in veljavni občinski odlok o občinskih cestah"
+            )
+            return (
+                "Varovalni pas javne ceste",
+                f"{road_class[:1].upper()}{road_class[1:]}",
+                legal_basis,
+                width,
+            )
+        if key == "gas":
+            width = 65.0 if "prenos" in combined else 5.0 if "distrib" in combined else None
+            return (
+                "Varovalni pas sistema zemeljskega plina",
+                kind,
+                "113. člen Energetskega zakona (EZ-2)",
+                width,
+            )
+        if key == "district_heat":
+            return (
+                "Varovalni pas omrežja daljinskega ogrevanja",
+                kind,
+                "Veljavni občinski prostorski akt in pogoji upravljavca omrežja",
+                None,
+            )
+        return None
+
+    @staticmethod
+    def _electricity_band_width(
+        combined: str, voltage: str | None
+    ) -> float | None:
+        if voltage is None:
+            return None
+        match = re.search(r"(\d+(?:[.,]\d+)?)\s*k\s*v", voltage, re.IGNORECASE)
+        if match is None:
+            return None
+        kv = float(match.group(1).replace(",", "."))
+        underground = "podzem" in combined or "kablovod" in combined
+        overhead = "nadzem" in combined or "daljnovod" in combined
+        if underground:
+            if kv >= 220:
+                return 10.0
+            if kv >= 35:
+                return 3.0
+            return 1.0
+        if overhead:
+            if kv >= 220:
+                return 40.0
+            if kv >= 35:
+                return 15.0
+            if kv > 1:
+                return 10.0
+            return 1.5
+        return None
+
+    @staticmethod
+    def _road_band_width(road_class: str) -> float | None:
+        normalized = road_class.lower()
+        if "avtocest" in normalized:
+            return 40.0
+        if "hitra cest" in normalized:
+            return 35.0
+        if "glavna cest" in normalized:
+            return 25.0
+        if "regionalna cest" in normalized:
+            return 15.0
+        if "državna kolesars" in normalized:
+            return 5.0
+        return None
+
+    @staticmethod
+    def _gji_geometry_relation(
+        *, direct: bool, distance: float, width: float | None, has_geometry: bool
+    ) -> str:
+        if has_geometry and distance <= 0.5:
+            relation = "Evidentirana os oziroma objekt GJI seka ali se dotika parcele."
+        elif has_geometry:
+            relation = f"Evidentirana os GJI je približno {distance:.1f} m od parcele."
+        else:
+            relation = "GURS objekt GJI neposredno povezuje z iskano parcelo."
+        if width is not None:
+            relation += (
+                f" Zakonski pas je {width:g} m na vsako stran; njegov izračunani "
+                "obris seka parcelo."
+            )
+        elif direct:
+            relation += (
+                " Točno širino varovalnega pasu in pogoje posega je treba potrditi "
+                "v občinskem aktu oziroma pri upravljavcu."
+            )
+        return relation
+
+    @classmethod
+    def _gji_detail(
+        cls, properties: dict[str, Any], width: float | None
+    ) -> str | None:
+        parts: list[str] = []
+        description = cls._clean_gji_attribute(properties.get("OPIS"))
+        source_method = cls._clean_gji_attribute(
+            properties.get("GJI_VIRI_NAZIV_SL")
+        )
+        source_date = cls._clean_gji_attribute(properties.get("DATUM_VIRA"))
+        if description:
+            parts.append(f"opis GJI: {description}")
+        if width is not None:
+            parts.append(f"širina pasu: {width:g} m na vsako stran")
+        if source_method:
+            suffix = f", {source_date}" if source_date else ""
+            parts.append(f"podlaga zajema: {source_method}{suffix}")
+        return " · ".join(parts) or None
+
+    @staticmethod
+    def _clean_gji_attribute(value: Any) -> str | None:
+        cleaned = SiteAnalysisClient._clean_value(value)
+        if cleaned and cleaned.casefold() not in {"ni podatka", "ni določeno"}:
+            return cleaned
+        return None
+
+    @staticmethod
+    def _gji_eid(properties: dict[str, Any]) -> str | None:
+        value = properties.get("EID_LINIJA") or properties.get("EID_GJI")
+        return str(value) if value is not None else None
+
+    @staticmethod
+    def _is_abandoned_gji(properties: dict[str, Any]) -> bool:
+        value = str(properties.get("GJI_OPUSCENOSTI_NAZIV_SL") or "").casefold()
+        return value.startswith("opuščeni")
+
     def _query_spatial_layer(
         self, parcel: GURSParcel, spec: SpatialLayerSpec
     ) -> list[SpatialFinding]:
@@ -549,6 +986,8 @@ class SiteAnalysisClient:
                         category=spec.category,
                         name=name,
                         detail=" · ".join(detail_parts) or None,
+                        legal_basis=self._spatial_legal_basis(spec, properties),
+                        geometry_relation="Uradni sloj geometrijsko seka območje parcele.",
                         tone=self._finding_tone(spec, properties),
                         reference=reference,
                         source=spec.source,
@@ -677,7 +1116,24 @@ class SiteAnalysisClient:
             return "gas"
         if code.startswith("23") or "toplot" in name:
             return "district_heat"
+        if code.startswith("11") or "cest" in name:
+            return "road"
         return None
+
+    @staticmethod
+    def _spatial_legal_basis(
+        spec: SpatialLayerSpec, properties: dict[str, Any]
+    ) -> str:
+        recorded = SiteAnalysisClient._clean_value(properties.get("PREDPIS"))
+        if recorded:
+            return recorded
+        if spec.group == "protected":
+            return "Zakon o ohranjanju narave (ZON) in predpis o konkretnem območju"
+        if spec.group == "heritage":
+            return "Zakon o varstvu kulturne dediščine (ZVKD-1) in akt o razglasitvi"
+        if spec.group == "risk":
+            return "Zakon o vodah (ZV-1) oziroma področni predpis za evidentirano nevarnost"
+        return "Zakon o vodah (ZV-1) in predpis o konkretnem varovanem območju"
 
     @staticmethod
     def _record_details(records: list[dict[str, Any]]) -> list[str]:
@@ -953,10 +1409,44 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
         "TRANSPARENT": "TRUE",
     }
     infrastructure_url = f"{KGI_WMS_URL}?{urlencode(infrastructure_params)}"
+    legal_regime_params = {
+        **common,
+        "LAYERS": ",".join(
+            [
+                *(f"SI.GURS.KGI:{spec.layer}" for spec in INFRASTRUCTURE_SPECS),
+                f"SI.GURS.KGI:{ROAD_SPEC.layer}",
+                "SI.GURS.KGI:LINIJE_LETALISCA_G",
+                "SI.GURS.KGI:POLIGONI_LETALISCA_G",
+            ]
+        ),
+        "FORMAT": "image/png",
+        "TRANSPARENT": "TRUE",
+    }
+    legal_regime_url = f"{KGI_WMS_URL}?{urlencode(legal_regime_params)}"
+    additional_regime_urls: list[str] = []
+    if SiteAnalysisClient._supports_municipal_regimes(parcel):
+        airport_params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetMap",
+            "CRS": "EPSG:3794",
+            "BBOX": bbox_text,
+            "WIDTH": 1200,
+            "HEIGHT": 760,
+            "LAYERS": RADOVLJICA_AIRPORT_LAYER,
+            "STYLES": "",
+            "FORMAT": "image/png",
+            "TRANSPARENT": "TRUE",
+        }
+        additional_regime_urls.append(
+            f"{RADOVLJICA_WMS_URL}?{urlencode(airport_params)}"
+        )
     return ParcelMap(
         orthophoto_url=orthophoto_url,
         parcel_overlay_url=overlay_url,
         infrastructure_overlay_url=infrastructure_url,
+        legal_regime_overlay_url=legal_regime_url,
+        legal_regime_additional_overlay_urls=additional_regime_urls,
         official_viewer_url=(
             "https://ipi.eprostor.gov.si/jv/"
             + (f"?eid={parcel.eid}" if parcel.eid else "")
@@ -965,7 +1455,9 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
             "Ortofoto in katastrski prikaz imata lahko različna datuma zajema. "
             "Prikaz meje ni geodetska zakoličba in ne nadomešča ureditve meje na terenu. "
             "Evidentirani komunalni vodi (GJI) so posplošeni in informativni; lega na "
-            "karti ne pomeni priključka ali soglasja upravljavca."
+            "karti ne pomeni priključka ali soglasja upravljavca. Geometrijska priloga "
+            "pravnih režimov prikazuje evidentirane osi in objekte, ne pa nujno uradnega "
+            "obrisa njihovega varovalnega pasu."
         ),
     )
 
