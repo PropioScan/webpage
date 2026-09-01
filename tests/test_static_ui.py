@@ -168,6 +168,13 @@ def test_cached_analysis_is_disclosed_and_can_be_checked_again():
     assert 'pendingForceRefresh ? "Preveri znova" : "Analiziraj"' in script
 
 
+def test_section_seven_explains_land_use_codes():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert '`${item.code} – ${item.name || "opis namenske rabe ni na voljo"}`' in script
+    assert '["Zaznane oznake namenske rabe", codeMeanings]' in script
+
+
 def test_propioscan_brand_and_legal_footer_are_present():
     page = _page()
 

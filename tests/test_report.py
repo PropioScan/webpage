@@ -4,6 +4,9 @@ import pymupdf
 
 from app import main
 from app.models import (
+    AssessmentTone,
+    LandUseAssessment,
+    LandUseAssessmentItem,
     ParcelInformation,
     PlanningCondition,
     PlanningContext,
@@ -42,6 +45,31 @@ def test_report_uses_all_official_sections_and_marks_unknowns_for_review():
     assert sections[4].status == "review"
     assert sections[6].status == "review"
     assert sections[7].status == "review"
+
+
+def test_section_seven_explains_detected_land_use_codes():
+    report_result = result()
+    report_result.land_use_assessment = LandUseAssessment(
+        tone=AssessmentTone.positive,
+        label="Ugodna indikacija",
+        summary="Površina podeželskega naselja.",
+        items=[
+            LandUseAssessmentItem(
+                code="SK",
+                name="Površine podeželskega naselja",
+                parcel_share_percent=100,
+                tone=AssessmentTone.positive,
+                label="Poselitvena / stanovanjska raba",
+                explanation="Preverite izvedbene pogoje.",
+            )
+        ],
+        disclaimer="Informativna razlaga.",
+    )
+
+    section = build_report_sections(report_result)[6]
+
+    assert section.fields[0].label == "Zaznane oznake namenske rabe"
+    assert section.fields[0].value == "SK – Površine podeželskega naselja"
 
 
 def test_generated_pdf_is_readable_branded_and_keeps_slovenian_characters():

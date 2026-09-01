@@ -748,10 +748,16 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         else:
             regime_fields.append(ReportField(group, "Preverjeni spletni sloji niso vrnili preseka"))
 
-    assessment_codes = [
-        item.code for item in (result.land_use_assessment.items if result.land_use_assessment else []) if item.code
+    assessment_code_meanings = [
+        f"{item.code} – {item.name or 'opis namenske rabe ni na voljo'}"
+        for item in (result.land_use_assessment.items if result.land_use_assessment else [])
+        if item.code
     ]
-    development_use = ", ".join(assessment_codes) if assessment_codes else "namenska raba ni bila strukturirano določena"
+    development_use = (
+        "; ".join(dict.fromkeys(assessment_code_meanings))
+        if assessment_code_meanings
+        else "namenska raba ni bila strukturirano določena"
+    )
 
     condition_fields: list[ReportField] = []
     for index, condition in enumerate(result.planning_conditions, start=1):

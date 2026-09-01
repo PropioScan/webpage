@@ -575,7 +575,10 @@ function renderOfficialForm(result, jobId) {
     ...officialFindingRows("Pravne in prostorske omejitve", result.constraints || []),
     ...officialFindingRows("Naravne nevarnosti", result.risks || []),
   ];
-  const codes = (assessment?.items || []).map((item) => item.code).filter(Boolean).join(", ") || "namenska raba ni bila strukturirano določena";
+  const codeMeanings = (assessment?.items || [])
+    .filter((item) => item.code)
+    .map((item) => `${item.code} – ${item.name || "opis namenske rabe ni na voljo"}`)
+    .join("; ") || "namenska raba ni bila strukturirano določena";
   const conditionRows = planningConditions.length
     ? planningConditions.map((condition, index) => {
       const pageLabel = (condition.pages || []).length ? `, str. ${condition.pages.join(", ")}` : "";
@@ -649,7 +652,7 @@ function renderOfficialForm(result, jobId) {
       title: "Razvojna stopnja nepozidanega stavbnega zemljišča in taksa",
       status: "review",
       rows: [
-        ["Zaznane oznake namenske rabe", codes],
+        ["Zaznane oznake namenske rabe", codeMeanings],
         ["Razvojna stopnja", "Ni določljiva iz preverjenih avtomatskih virov"],
         ["Taksa za neizkoriščeno stavbno zemljišče", "Območje plačevanja ni bilo potrjeno"],
       ],
