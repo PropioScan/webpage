@@ -528,7 +528,7 @@ function renderCacheNotice(result, job) {
   }
   const preparedAt = formatReportDate(job.cache_stored_at || result.completed_at);
   const expiresAt = formatReportDate(job.cache_expires_at);
-  cacheNoticeText.textContent = `Analiza je bila pripravljena ${preparedAt} in je lahko stara do 7 dni. Shranjena različica velja do ${expiresAt}. Za najnovejše stanje zaženite nov pregled uradnih virov.`;
+  cacheNoticeText.textContent = `Podatki niso bili ponovno pridobljeni iz uradnih virov v živo. Prikazan je rezultat, shranjen v podatkovni zbirki ${preparedAt}; shranjena različica velja do ${expiresAt}. Če želite najnovejše stanje, zaženite nov pregled uradnih virov.`;
   cacheNotice.hidden = false;
 }
 

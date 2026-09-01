@@ -149,12 +149,21 @@ def test_cached_analysis_is_disclosed_and_can_be_checked_again():
 
     notice = page.get_element_by_id("cache-notice")
     assert notice.get("hidden") == ""
-    assert "Prikazani so shranjeni podatki" in notice.text_content()
+    assert "Prikazan je shranjen rezultat" in notice.text_content()
+    assert "PODATKOVNA ZBIRKA" in notice.text_content()
+    assert "NI PRIDOBLJENO V ŽIVO" in notice.text_content()
     assert page.xpath("//*[@id='cache-refresh' and @type='button']")
-    assert "Preveri znova z aktualnimi viri" in notice.text_content()
+    assert "Zaženi nov pregled uradnih virov" in notice.text_content()
+    result_section = page.get_element_by_id("results")
+    assert result_section.index(notice) < result_section.index(
+        page.xpath(
+            "//*[@id='results']/*[contains(concat(' ', normalize-space(@class), ' '), ' result-heading ')]"
+        )[0]
+    )
     assert "force_refresh: forceRefresh" in script
     assert "if (!job.from_cache)" in script
     assert "job.cache_stored_at || result.completed_at" in script
+    assert "Podatki niso bili ponovno pridobljeni iz uradnih virov v živo" in script
     assert "requestParcelSearch(activeParcelReference, true)" in script
     assert 'pendingForceRefresh ? "Preveri znova" : "Analiziraj"' in script
 

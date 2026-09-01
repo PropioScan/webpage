@@ -177,6 +177,19 @@
           </section>
 
           <section id="results" class="results" aria-labelledby="results-title" hidden>
+            <aside id="cache-notice" class="cache-notice" role="status" aria-live="polite" hidden>
+              <span class="cache-notice-icon" aria-hidden="true">↻</span>
+              <div class="cache-notice-copy">
+                <div class="cache-notice-heading">
+                  <strong>Prikazan je shranjen rezultat</strong>
+                  <span class="cache-notice-badge is-saved">PODATKOVNA ZBIRKA</span>
+                  <span class="cache-notice-badge is-not-live">NI PRIDOBLJENO V ŽIVO</span>
+                </div>
+                <p id="cache-notice-text">Podatki niso bili ponovno pridobljeni iz uradnih virov v živo.</p>
+              </div>
+              <button id="cache-refresh" type="button"><span aria-hidden="true">↗</span> Zaženi nov pregled uradnih virov</button>
+            </aside>
+
             <div class="result-heading">
               <div>
                 <div class="result-title-line">
@@ -187,15 +200,6 @@
               </div>
               <a class="source-link" href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener noreferrer">Odpri GURS <span>↗</span></a>
             </div>
-
-            <aside id="cache-notice" class="cache-notice" role="status" aria-live="polite" hidden>
-              <span class="cache-notice-icon" aria-hidden="true">↻</span>
-              <div class="cache-notice-copy">
-                <strong>Prikazani so shranjeni podatki</strong>
-                <p id="cache-notice-text">Ta analiza je bila že pripravljena in je lahko stara do 7 dni.</p>
-              </div>
-              <button id="cache-refresh" type="button">Preveri znova z aktualnimi viri</button>
-            </aside>
 
             <nav id="result-tabs" class="result-tabs" aria-label="Področja rezultatov" role="tablist">
               <button id="result-tab-overview" class="is-active" type="button" role="tab" aria-selected="true" aria-controls="result-panel-overview" data-result-tab="overview">Hitri pregled parcele</button>

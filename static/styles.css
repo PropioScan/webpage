@@ -1227,43 +1227,59 @@ h1, h2, h3, h4, .brand, .brand-name, .footer-brand > span,
 /* Clearly identified seven-day parcel-result cache. */
 .cache-notice {
   max-width: 1480px;
-  margin: 0 auto 22px;
-  padding: 15px 17px;
+  margin: 0 auto 24px;
+  padding: 17px 18px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  border: 1px solid #ecc895;
-  border-radius: 12px;
-  color: #68471d;
-  background: linear-gradient(120deg, #fff8e9, #fffdf8);
-  box-shadow: 0 8px 22px rgba(105, 72, 27, .07);
+  gap: 16px;
+  overflow: hidden;
+  border: 1px solid #b8d4ef;
+  border-left: 5px solid #2273b9;
+  border-radius: 14px;
+  color: #263849;
+  background: linear-gradient(115deg, #f1f8ff 0%, #fffaf0 72%, #f4fbf6 100%);
+  box-shadow: 0 10px 28px rgba(35, 86, 128, .11);
 }
 .cache-notice[hidden] { display: none; }
 .cache-notice-icon {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   color: white;
-  background: #c4862f;
-  font: 800 19px/1 "Manrope", sans-serif;
+  background: linear-gradient(145deg, #247cc4, #15568f);
+  box-shadow: 0 5px 12px rgba(31, 105, 166, .25);
+  font: 800 21px/1 "Manrope", sans-serif;
 }
-.cache-notice-copy strong { display: block; color: #563815; font-size: 12px; }
-.cache-notice-copy p { margin: 3px 0 0; color: #7e6038; font-size: 10px; line-height: 1.5; }
+.cache-notice-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.cache-notice-copy strong { color: #173c5c; font-size: 13px; }
+.cache-notice-copy p { margin: 5px 0 0; color: #526574; font-size: 10px; line-height: 1.55; }
+.cache-notice-badge {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  line-height: 1;
+}
+.cache-notice-badge.is-saved { color: #155690; background: #dceeff; }
+.cache-notice-badge.is-not-live { color: #8b5915; background: #ffebc7; }
 .cache-notice button {
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid #bc7621;
-  border-radius: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #258251;
+  border-radius: 9px;
   color: white;
-  background: #bc7621;
+  background: #258251;
   cursor: pointer;
   font-size: 10px;
   font-weight: 800;
+  box-shadow: 0 5px 13px rgba(37, 130, 81, .2);
 }
-.cache-notice button:hover:not(:disabled) { background: #9e5f16; }
+.cache-notice button span { margin-right: 4px; }
+.cache-notice button:hover:not(:disabled) { background: #19683e; }
 .cache-notice button:disabled { opacity: .55; cursor: wait; }
 
 @media (max-width: 680px) {
