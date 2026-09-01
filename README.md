@@ -83,6 +83,15 @@ SUMMARY_LANGUAGE=Slovenian
 
 The summary prompt explicitly forbids inventing permissions or restrictions and requires page evidence. Model output is still not a legal opinion.
 
+For completed parcel analyses, the application copies the Responses API usage
+counts already present in the result into the private traffic database. The
+protected admin panel can therefore show app-level calls, input/output/total
+tokens, models, rate-limit observations, failures, and a CSV export for the
+7- or 30-day retention window. It never stores the API key, prompts, model
+responses, or document text in this usage table. These figures cover Propioscan
+only and are not an invoice; use the OpenAI Platform Usage page for official
+account-wide usage and costs.
+
 ## OCR
 
 `pypdf` handles searchable PDFs. For scans, install [OCRmyPDF](https://ocrmypdf.readthedocs.io/) and Slovenian plus English Tesseract language data, then leave `PDF_ENABLE_OCR=true`. The app detects mostly textless PDFs, creates a cached OCR copy, and re-runs extraction. When OCR is not present, the result warns that scanned-page references may be missing.

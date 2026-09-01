@@ -13,6 +13,10 @@ const analyticsPeriod = document.querySelector("#analytics-period");
 const analyticsMessage = document.querySelector("#analytics-message");
 const analyticsContent = document.querySelector("#analytics-content");
 const analyticsDownload = document.querySelector("#analytics-download");
+const openaiPeriod = document.querySelector("#openai-period");
+const openaiMessage = document.querySelector("#openai-message");
+const openaiContent = document.querySelector("#openai-content");
+const openaiDownload = document.querySelector("#openai-download");
 const PAGE_SIZE = 100;
 let captchaToken = null;
 let turnstileWidget = null;
@@ -47,6 +51,8 @@ function bindControls() {
   document.querySelector("#log-lines").addEventListener("change", loadLogs);
   document.querySelector("#analytics-refresh").addEventListener("click", () => loadAnalytics(true));
   analyticsPeriod.addEventListener("change", () => loadAnalytics());
+  document.querySelector("#openai-refresh").addEventListener("click", loadOpenAIUsage);
+  openaiPeriod.addEventListener("change", loadOpenAIUsage);
 }
 
 async function prepareLogin() {
@@ -167,9 +173,10 @@ async function logout() {
 function openTab(name) {
   document.querySelectorAll("[data-admin-tab]").forEach((button) => button.classList.toggle("is-active", button.dataset.adminTab === name));
   document.querySelectorAll("[data-admin-panel]").forEach((panel) => { panel.hidden = panel.dataset.adminPanel !== name; });
-  const titles = { overview: "Pregled uporabe", analytics: "Google Analytics", requests: "Zahteve za parcele", logs: "Dnevniki aplikacije" };
+  const titles = { overview: "Pregled uporabe", analytics: "Google Analytics", openai: "OpenAI poraba", requests: "Zahteve za parcele", logs: "Dnevniki aplikacije" };
   document.querySelector("#admin-page-title").textContent = titles[name] || "Administracija";
   if (name === "analytics") loadAnalytics();
+  if (name === "openai") loadOpenAIUsage();
   if (name === "requests") loadRequests();
   if (name === "logs") loadLogs();
 }
@@ -428,6 +435,115 @@ function formatDuration(value) {
   const seconds = Math.max(0, Math.round(Number(value) || 0));
   const minutes = Math.floor(seconds / 60);
   return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
+}
+
+async function loadOpenAIUsage() {
+  const days = Number(openaiPeriod.value) || 30;
+  const refreshButton = document.querySelector("#openai-refresh");
+  openaiMessage.hidden = false;
+  openaiMessage.className = "analytics-message";
+  openaiMessage.textContent = "Nalagam porabo OpenAI …";
+  openaiContent.hidden = true;
+  refreshButton.disabled = true;
+  openaiDownload.href = `/api/admin/openai-usage.csv?days=${days}`;
+  const data = await api(`/api/admin/openai-usage?days=${days}`);
+  refreshButton.disabled = false;
+  if (!data || data.status !== "ready") {
+    openaiMessage.classList.add("is-error");
+    openaiMessage.textContent = data?.detail || "Statistike OpenAI trenutno ni mogoče naložiti.";
+    return;
+  }
+
+  openaiMessage.hidden = true;
+  openaiContent.hidden = false;
+  renderOpenAISummary(data.summary || {});
+  renderAnalyticsTable(
+    "#openai-daily",
+    data.daily,
+    (row) => [
+      formatSimpleDate(row.date),
+      formatNumber(row.analyses),
+      formatNumber(row.ai_analyses),
+      formatNumber(row.calls),
+      formatNumber(row.input_tokens),
+      formatNumber(row.output_tokens),
+      formatNumber(row.total_tokens),
+      formatNumber(row.failures),
+    ],
+    8,
+  );
+  renderAnalyticsTable(
+    "#openai-models",
+    data.models,
+    (row) => [row.model || "—", formatNumber(row.analyses), formatNumber(row.calls), formatNumber(row.total_tokens)],
+    4,
+  );
+  renderAnalyticsTable(
+    "#openai-recent",
+    data.recent,
+    (row) => [
+      formatDate(row.requested_at),
+      row.parcel_reference || "—",
+      row.model || "—",
+      formatNumber(row.calls),
+      formatNumber(row.input_tokens),
+      formatNumber(row.output_tokens),
+      formatNumber(row.total_tokens),
+      formatNumber(row.failures),
+      row.job_id ? row.job_id.slice(0, 8) : "—",
+    ],
+    9,
+  );
+  renderOpenAIRateLimit(data.latest_rate_limit);
+  document.querySelector("#openai-generated").textContent = `Osveženo ${formatDate(data.generated_at)}`;
+}
+
+function renderOpenAISummary(values) {
+  const cards = [
+    [values.ai_analyses, "Analize z OpenAI"],
+    [values.calls, "API klici"],
+    [values.input_tokens, "Vhodni tokeni"],
+    [values.output_tokens, "Izhodni tokeni"],
+    [values.total_tokens, "Skupaj tokeni"],
+    [values.failures, "Neuspešni povzetki"],
+  ];
+  const container = document.querySelector("#openai-summary");
+  container.replaceChildren(...cards.map(([value, label]) => {
+    const card = document.createElement("article");
+    const strong = document.createElement("strong");
+    const span = document.createElement("span");
+    strong.textContent = formatNumber(value);
+    span.textContent = label;
+    card.append(strong, span);
+    return card;
+  }));
+}
+
+function renderOpenAIRateLimit(limit) {
+  const container = document.querySelector("#openai-rate-limit");
+  container.replaceChildren();
+  if (!limit || limit.limit_tokens === null) {
+    container.textContent = "Omejitev še ni bila zabeležena v zaključeni analizi.";
+    return;
+  }
+  const remaining = Number(limit.remaining_tokens) || 0;
+  const total = Math.max(1, Number(limit.limit_tokens) || 0);
+  const strong = document.createElement("strong");
+  const label = document.createElement("span");
+  const track = document.createElement("i");
+  const fill = document.createElement("b");
+  const note = document.createElement("p");
+  strong.textContent = `${formatNumber(remaining)} / ${formatNumber(total)}`;
+  label.textContent = "preostalih tokenov v zadnji zabeleženi omejitvi";
+  fill.style.width = `${Math.max(0, Math.min(100, (remaining / total) * 100))}%`;
+  track.append(fill);
+  note.textContent = `Ponastavitev: ${limit.reset || "—"} · meritev: ${formatDate(limit.observed_at)}`;
+  container.append(strong, label, track, note);
+}
+
+function formatSimpleDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return value || "—";
+  return new Intl.DateTimeFormat("sl-SI", { dateStyle: "medium" }).format(new Date(`${value}T12:00:00`));
 }
 
 async function loadLogs() {

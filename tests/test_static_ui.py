@@ -235,11 +235,14 @@ def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
     assert page.xpath("//*[@id='admin-turnstile']")
     assert page.xpath("//*[@data-admin-tab='overview']")
     assert page.xpath("//*[@data-admin-tab='analytics']")
+    assert page.xpath("//*[@data-admin-tab='openai']")
     assert page.xpath("//*[@data-admin-tab='requests']")
     assert page.xpath("//*[@data-admin-tab='logs']")
     assert page.xpath("//*[@id='statistics-download' and @download]")
     assert page.xpath("//*[@id='analytics-download' and @download]")
     assert page.xpath("//*[@id='analytics-period']")
+    assert page.xpath("//*[@id='openai-download' and @download]")
+    assert page.xpath("//*[@id='openai-period']")
     assert page.xpath("//*[@id='filter-group']")
     assert page.xpath("//*[@id='filter-ip']")
     assert 'action: "admin_login"' in script
@@ -251,6 +254,9 @@ def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
     assert 'api(`/api/admin/analytics?${query}`)' in script
     assert "renderAnalyticsSummary" in script
     assert "renderAnalyticsDaily" in script
+    assert 'api(`/api/admin/openai-usage?days=${days}`)' in script
+    assert "renderOpenAISummary" in script
+    assert "renderOpenAIRateLimit" in script
     assert "Tehnična skupina ni oseba" in page.text_content()
 
 

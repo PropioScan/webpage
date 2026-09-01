@@ -16,6 +16,19 @@ from urllib.parse import urlsplit
 
 GROUP_BY_VALUES = {"none", "visitor", "technical", "ip", "parcel", "device", "day", "status"}
 STATUS_VALUES = {"queued", "running", "completed", "failed"}
+OPENAI_USAGE_COLUMNS = {
+    "openai_usage_synced": "INTEGER NOT NULL DEFAULT 0",
+    "openai_configured": "INTEGER NOT NULL DEFAULT 0",
+    "openai_model": "TEXT",
+    "openai_calls": "INTEGER NOT NULL DEFAULT 0",
+    "openai_input_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "openai_output_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "openai_total_tokens": "INTEGER NOT NULL DEFAULT 0",
+    "openai_rate_limit_tokens": "INTEGER",
+    "openai_rate_limit_remaining_tokens": "INTEGER",
+    "openai_rate_limit_reset": "TEXT",
+    "openai_failures": "INTEGER NOT NULL DEFAULT 0",
+}
 
 
 @dataclass(frozen=True)
@@ -103,6 +116,15 @@ class TrafficStore:
                     ON admin_login_attempts(ip_address, username, attempted_at DESC);
                 """
             )
+            existing_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(parcel_requests)")
+            }
+            for name, declaration in OPENAI_USAGE_COLUMNS.items():
+                if name not in existing_columns:
+                    connection.execute(
+                        f"ALTER TABLE parcel_requests ADD COLUMN {name} {declaration}"
+                    )
         try:
             self.path.chmod(0o600)
         except OSError:
@@ -182,9 +204,13 @@ class TrafficStore:
     def refresh_job_statuses(self, jobs_dir: Path) -> None:
         with self._connect() as connection:
             job_rows = connection.execute(
-                "SELECT job_id, status_updated_at FROM parcel_requests"
+                """
+                SELECT job_id, status, status_updated_at, openai_usage_synced
+                FROM parcel_requests
+                WHERE status IN ('queued', 'running') OR openai_usage_synced = 0
+                """
             ).fetchall()
-            updates: list[tuple[str, str, str]] = []
+            updates: list[tuple[Any, ...]] = []
             for row in job_rows:
                 path = jobs_dir / f"{row['job_id']}.json"
                 if not path.is_file():
@@ -195,13 +221,206 @@ class TrafficStore:
                     updated_at = item["updated_at"]
                 except (OSError, ValueError, KeyError, TypeError):
                     continue
-                if status in STATUS_VALUES and updated_at > row["status_updated_at"]:
-                    updates.append((status, updated_at, row["job_id"]))
+                if status not in STATUS_VALUES:
+                    continue
+                result = item.get("result") if isinstance(item, dict) else None
+                usage = result.get("openai_usage", {}) if isinstance(result, dict) else {}
+                terminal = status in {"completed", "failed"}
+                should_update = (
+                    updated_at > row["status_updated_at"]
+                    or (terminal and not row["openai_usage_synced"])
+                )
+                if not should_update:
+                    continue
+                updates.append(
+                    (
+                        status,
+                        updated_at,
+                        int(terminal),
+                        int(bool(usage.get("configured"))),
+                        str(usage.get("model") or "")[:100] or None,
+                        _nonnegative_int(usage.get("calls")),
+                        _nonnegative_int(usage.get("input_tokens")),
+                        _nonnegative_int(usage.get("output_tokens")),
+                        _nonnegative_int(usage.get("total_tokens")),
+                        _optional_nonnegative_int(usage.get("rate_limit_tokens")),
+                        _optional_nonnegative_int(
+                            usage.get("rate_limit_remaining_tokens")
+                        ),
+                        str(usage.get("rate_limit_reset") or "")[:100] or None,
+                        _openai_failure_count(result),
+                        row["job_id"],
+                    )
+                )
             if updates:
                 connection.executemany(
-                    "UPDATE parcel_requests SET status = ?, status_updated_at = ? WHERE job_id = ?",
+                    """
+                    UPDATE parcel_requests SET
+                        status = ?, status_updated_at = ?, openai_usage_synced = ?,
+                        openai_configured = ?, openai_model = ?, openai_calls = ?,
+                        openai_input_tokens = ?, openai_output_tokens = ?,
+                        openai_total_tokens = ?, openai_rate_limit_tokens = ?,
+                        openai_rate_limit_remaining_tokens = ?,
+                        openai_rate_limit_reset = ?, openai_failures = ?
+                    WHERE job_id = ?
+                    """,
                     updates,
                 )
+
+    def openai_usage_report(
+        self, days: int = 30, *, now: datetime | None = None
+    ) -> dict[str, Any]:
+        period = max(1, min(int(days), self.retention.days))
+        generated_at = _utc(now)
+        cutoff = (generated_at - timedelta(days=period - 1)).date().isoformat()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT requested_at, parcel_reference, job_id, status_updated_at,
+                       openai_configured, openai_model, openai_calls,
+                       openai_input_tokens, openai_output_tokens,
+                       openai_total_tokens, openai_rate_limit_tokens,
+                       openai_rate_limit_remaining_tokens,
+                       openai_rate_limit_reset, openai_failures
+                FROM parcel_requests
+                WHERE status = 'completed' AND openai_usage_synced = 1
+                  AND substr(requested_at, 1, 10) >= ?
+                ORDER BY requested_at DESC
+                """,
+                (cutoff,),
+            ).fetchall()
+
+        daily: dict[str, dict[str, Any]] = {}
+        models: dict[str, dict[str, Any]] = {}
+        latest_limit: dict[str, Any] | None = None
+        for row in rows:
+            day = row["requested_at"][:10]
+            day_item = daily.setdefault(
+                day,
+                {
+                    "date": day,
+                    "analyses": 0,
+                    "ai_analyses": 0,
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "failures": 0,
+                },
+            )
+            day_item["analyses"] += 1
+            day_item["ai_analyses"] += int(row["openai_calls"] > 0)
+            for key, column in (
+                ("calls", "openai_calls"),
+                ("input_tokens", "openai_input_tokens"),
+                ("output_tokens", "openai_output_tokens"),
+                ("total_tokens", "openai_total_tokens"),
+                ("failures", "openai_failures"),
+            ):
+                day_item[key] += int(row[column])
+
+            model = row["openai_model"] or "Ni modela"
+            model_item = models.setdefault(
+                model,
+                {
+                    "model": model,
+                    "analyses": 0,
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                },
+            )
+            model_item["analyses"] += int(row["openai_calls"] > 0)
+            for key, column in (
+                ("calls", "openai_calls"),
+                ("input_tokens", "openai_input_tokens"),
+                ("output_tokens", "openai_output_tokens"),
+                ("total_tokens", "openai_total_tokens"),
+            ):
+                model_item[key] += int(row[column])
+
+            if latest_limit is None and row["openai_rate_limit_tokens"] is not None:
+                latest_limit = {
+                    "limit_tokens": row["openai_rate_limit_tokens"],
+                    "remaining_tokens": row["openai_rate_limit_remaining_tokens"],
+                    "reset": row["openai_rate_limit_reset"],
+                    "observed_at": row["status_updated_at"],
+                }
+
+        summary = {
+            "completed_analyses": len(rows),
+            "configured_analyses": sum(row["openai_configured"] for row in rows),
+            "ai_analyses": sum(row["openai_calls"] > 0 for row in rows),
+            "calls": sum(row["openai_calls"] for row in rows),
+            "input_tokens": sum(row["openai_input_tokens"] for row in rows),
+            "output_tokens": sum(row["openai_output_tokens"] for row in rows),
+            "total_tokens": sum(row["openai_total_tokens"] for row in rows),
+            "failures": sum(row["openai_failures"] for row in rows),
+        }
+        return {
+            "period_days": period,
+            "retention_days": self.retention.days,
+            "generated_at": generated_at.isoformat(),
+            "summary": summary,
+            "daily": sorted(daily.values(), key=lambda item: item["date"]),
+            "models": sorted(
+                models.values(), key=lambda item: item["total_tokens"], reverse=True
+            ),
+            "latest_rate_limit": latest_limit,
+            "recent": [
+                {
+                    "requested_at": row["requested_at"],
+                    "parcel_reference": row["parcel_reference"],
+                    "job_id": row["job_id"],
+                    "model": row["openai_model"],
+                    "calls": row["openai_calls"],
+                    "input_tokens": row["openai_input_tokens"],
+                    "output_tokens": row["openai_output_tokens"],
+                    "total_tokens": row["openai_total_tokens"],
+                    "failures": row["openai_failures"],
+                }
+                for row in rows[:100]
+            ],
+        }
+
+    def export_openai_usage_csv(
+        self, days: int = 30, *, now: datetime | None = None
+    ) -> tuple[str, str]:
+        report = self.openai_usage_report(days, now=now)
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(
+            ("Propioscan · OpenAI poraba", f"Zadnjih {report['period_days']} dni")
+        )
+        writer.writerow(())
+        writer.writerow(("Povzetek", "Vrednost"))
+        for key, label in (
+            ("completed_analyses", "Zaključene analize"),
+            ("ai_analyses", "Analize z OpenAI"),
+            ("calls", "API klici"),
+            ("input_tokens", "Vhodni tokeni"),
+            ("output_tokens", "Izhodni tokeni"),
+            ("total_tokens", "Skupaj tokeni"),
+            ("failures", "Neuspešni AI povzetki"),
+        ):
+            writer.writerow((label, report["summary"][key]))
+        writer.writerow(())
+        fields = (
+            "requested_at",
+            "parcel_reference",
+            "job_id",
+            "model",
+            "calls",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "failures",
+        )
+        writer.writerow(fields)
+        for row in report["recent"]:
+            writer.writerow(tuple(row.get(field, "") for field in fields))
+        return f"propioscan-openai-{report['period_days']}-dni.csv", output.getvalue()
 
     def query(
         self,
@@ -512,3 +731,31 @@ def _filter_date(value: str, *, end: bool) -> str:
         return _utc(datetime.fromisoformat(candidate.replace("Z", "+00:00"))).isoformat()
     except ValueError:
         return "9999-12-31T23:59:59+00:00" if end else "0001-01-01T00:00:00+00:00"
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return _nonnegative_int(value)
+
+
+def _openai_failure_count(result: Any) -> int:
+    if not isinstance(result, dict):
+        return 0
+    failures = 0
+    for document in result.get("documents", []):
+        if not isinstance(document, dict):
+            continue
+        for warning in document.get("extraction_warnings", []):
+            if str(warning).startswith(
+                "Povzetka z umetno inteligenco ni bilo mogoče pripraviti"
+            ):
+                failures += 1
+    return failures

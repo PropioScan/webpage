@@ -6,8 +6,8 @@
     <meta name="robots" content="noindex,nofollow,noarchive">
     <meta name="theme-color" content="#10243d">
     <link rel="icon" type="image/png" href="/static/propioscan-mark.png">
-    <link rel="stylesheet" href="/static/admin.css?v=3">
-    <script src="/static/admin.js?v=3" defer></script>
+    <link rel="stylesheet" href="/static/admin.css?v=4">
+    <script src="/static/admin.js?v=4" defer></script>
     <title>Propioscan · skrbniška plošča</title>
   </head>
   <body>
@@ -44,8 +44,9 @@
           <nav aria-label="Skrbniška področja">
             <button class="admin-tab is-active" type="button" data-admin-tab="overview"><span>01</span>Pregled</button>
             <button class="admin-tab" type="button" data-admin-tab="analytics"><span>02</span>Google Analytics</button>
-            <button class="admin-tab" type="button" data-admin-tab="requests"><span>03</span>Zahteve za parcele</button>
-            <button class="admin-tab" type="button" data-admin-tab="logs"><span>04</span>Dnevniki aplikacije</button>
+            <button class="admin-tab" type="button" data-admin-tab="openai"><span>03</span>OpenAI poraba</button>
+            <button class="admin-tab" type="button" data-admin-tab="requests"><span>04</span>Zahteve za parcele</button>
+            <button class="admin-tab" type="button" data-admin-tab="logs"><span>05</span>Dnevniki aplikacije</button>
           </nav>
           <div class="admin-sidebar-foot">
             <p>Prijavljen: <strong id="admin-session-user">—</strong></p>
@@ -114,6 +115,39 @@
                 </article>
               </div>
               <p class="analytics-privacy-note">Prikazane so samo združene meritve uporabnikov, ki so dovolili analitične piškotke. Številke parcel se v Google Analytics ne pošiljajo.</p>
+            </div>
+          </section>
+
+          <section class="admin-panel" data-admin-panel="openai" hidden>
+            <div class="analytics-toolbar">
+              <label>Obdobje<select id="openai-period"><option value="7">Zadnjih 7 dni</option><option value="30" selected>Zadnjih 30 dni</option></select></label>
+              <button id="openai-refresh" type="button">Osveži podatke</button>
+              <a id="openai-download" href="/api/admin/openai-usage.csv?days=30" download>Prenesi CSV</a>
+              <a class="analytics-external" href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer">Odpri OpenAI Usage ↗</a>
+            </div>
+
+            <div id="openai-message" class="analytics-message" role="status" aria-live="polite">Nalagam porabo OpenAI …</div>
+            <div id="openai-content" hidden>
+              <div id="openai-summary" class="summary-grid"></div>
+              <div class="analytics-grid">
+                <article class="analytics-card analytics-card-wide">
+                  <header><div><span>Časovni pregled</span><h2>Poraba po dnevih</h2></div><p id="openai-generated">—</p></header>
+                  <div class="table-scroll"><table><thead><tr><th>Datum</th><th>Zaključene analize</th><th>Analize z AI</th><th>API klici</th><th>Vhodni tokeni</th><th>Izhodni tokeni</th><th>Skupaj</th><th>Napake</th></tr></thead><tbody id="openai-daily"></tbody></table></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Modeli</span><h2>Poraba po modelu</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Model</th><th>Analize</th><th>Klici</th><th>Tokeni</th></tr></thead><tbody id="openai-models"></tbody></table></div>
+                </article>
+                <article class="analytics-card">
+                  <header><div><span>Zadnja meritev</span><h2>Omejitev tokenov</h2></div></header>
+                  <div id="openai-rate-limit" class="openai-rate-limit"></div>
+                </article>
+                <article class="analytics-card analytics-card-wide">
+                  <header><div><span>Podrobnosti</span><h2>Najnovejše analize</h2></div></header>
+                  <div class="table-scroll"><table><thead><tr><th>Čas</th><th>Parcela</th><th>Model</th><th>Klici</th><th>Vhodni tokeni</th><th>Izhodni tokeni</th><th>Skupaj</th><th>Napake</th><th>Opravilo</th></tr></thead><tbody id="openai-recent"></tbody></table></div>
+                </article>
+              </div>
+              <p class="analytics-privacy-note">To je poraba OpenAI samo za analize Propioscan v obdobju hrambe, ne celoten račun ali uradni obračun stroškov. Besedila dokumentov in API ključ se v statistiki ne shranjujejo.</p>
             </div>
           </section>
 

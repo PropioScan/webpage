@@ -428,6 +428,33 @@ def admin_analytics_csv(request: Request, days: int = 30) -> Response:
     )
 
 
+@app.get("/api/admin/openai-usage", include_in_schema=False)
+def admin_openai_usage(request: Request, days: int = 30) -> dict:
+    _require_admin(request)
+    if days not in {7, 30}:
+        raise HTTPException(status_code=422, detail="Obdobje mora biti 7 ali 30 dni.")
+    traffic.refresh_job_statuses(settings.data_dir / "jobs")
+    return {"status": "ready", **traffic.openai_usage_report(days)}
+
+
+@app.get("/api/admin/openai-usage.csv", include_in_schema=False)
+def admin_openai_usage_csv(request: Request, days: int = 30) -> Response:
+    _require_admin(request)
+    if days not in {7, 30}:
+        raise HTTPException(status_code=422, detail="Obdobje mora biti 7 ali 30 dni.")
+    traffic.refresh_job_statuses(settings.data_dir / "jobs")
+    filename, content = traffic.export_openai_usage_csv(days)
+    return Response(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.post("/api/privacy/events", status_code=status.HTTP_204_NO_CONTENT)
 def record_privacy_event(
     event: PrivacyEventRequest,

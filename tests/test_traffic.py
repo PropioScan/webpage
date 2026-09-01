@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from datetime import datetime, timedelta, timezone
 
 from app.traffic import RequestFilters, TrafficStore, classify_user_agent
@@ -100,3 +101,94 @@ def test_traffic_retention_and_visitor_withdrawal(tmp_path):
 def test_device_classifier_distinguishes_bot_and_desktop():
     assert classify_user_agent("Googlebot/2.1")[0] == "bot"
     assert classify_user_agent("Mozilla/5.0 (Windows NT 10.0) Firefox/120")[0] == "desktop"
+
+
+def test_openai_usage_is_synced_from_jobs_aggregated_and_exported(tmp_path):
+    store = TrafficStore(tmp_path, retention_days=30, group_secret="secret")
+    now = datetime(2026, 9, 1, 10, tzinfo=timezone.utc)
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    jobs = (
+        (
+            "a" * 32,
+            now,
+            "2057 314/4",
+            {
+                "configured": True,
+                "model": "gpt-test",
+                "calls": 2,
+                "input_tokens": 1200,
+                "output_tokens": 180,
+                "total_tokens": 1380,
+                "rate_limit_tokens": 5000,
+                "rate_limit_remaining_tokens": 3620,
+                "rate_limit_reset": "2s",
+            },
+            [],
+        ),
+        (
+            "b" * 32,
+            now - timedelta(days=1),
+            "2057 315/1",
+            {
+                "configured": True,
+                "model": "gpt-test",
+                "calls": 1,
+                "input_tokens": 600,
+                "output_tokens": 90,
+                "total_tokens": 690,
+            },
+            [
+                "Povzetka z umetno inteligenco ni bilo mogoče pripraviti "
+                "(RateLimitError); prikazan je samodejni izvleček."
+            ],
+        ),
+    )
+    for index, (job_id, timestamp, parcel, usage, warnings) in enumerate(jobs, start=1):
+        _record(store, f"r{index}", job_id, parcel, f"192.0.2.{index}", timestamp)
+        (jobs_dir / f"{job_id}.json").write_text(
+            json.dumps(
+                {
+                    "id": job_id,
+                    "status": "completed",
+                    "updated_at": timestamp.isoformat(),
+                    "result": {
+                        "openai_usage": usage,
+                        "documents": [{"extraction_warnings": warnings}],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    store.refresh_job_statuses(jobs_dir)
+    report = store.openai_usage_report(7, now=now)
+
+    assert report["summary"] == {
+        "completed_analyses": 2,
+        "configured_analyses": 2,
+        "ai_analyses": 2,
+        "calls": 3,
+        "input_tokens": 1800,
+        "output_tokens": 270,
+        "total_tokens": 2070,
+        "failures": 1,
+    }
+    assert report["models"] == [
+        {
+            "model": "gpt-test",
+            "analyses": 2,
+            "calls": 3,
+            "input_tokens": 1800,
+            "output_tokens": 270,
+            "total_tokens": 2070,
+        }
+    ]
+    assert report["latest_rate_limit"]["remaining_tokens"] == 3620
+    assert len(report["daily"]) == 2
+    assert report["recent"][0]["parcel_reference"] == "2057 314/4"
+
+    filename, content = store.export_openai_usage_csv(7, now=now)
+    assert filename == "propioscan-openai-7-dni.csv"
+    assert "Vhodni tokeni,1800" in content
+    assert "2057 314/4" in content
