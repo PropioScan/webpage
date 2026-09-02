@@ -14,6 +14,7 @@ from .models import (
     PlanningMapEvidence,
     SearchResult,
 )
+from .municipal_sources import MunicipalPlanningSourceLoader
 from .pdf_downloader import PISArchiveDownloader
 from .pdf_parser import PDFParser, find_parcel_mentions
 from .pip_extractor import (
@@ -59,6 +60,7 @@ class ParcelSearchService:
         site_analysis = SiteAnalysisClient(self.settings)
         downloader = PISArchiveDownloader(self.settings)
         parser = PDFParser(self.settings)
+        municipal_sources = MunicipalPlanningSourceLoader(self.settings, parser)
         summarizer = ParcelSummarizer(self.settings)
         warnings: list[str] = []
         documents: list[DocumentResult] = []
@@ -189,6 +191,12 @@ class ParcelSearchService:
                                 match=match,
                             )
                         )
+            progress(96, "Loading official municipal planning conditions…")
+            supplemental_sources, supplemental_warnings = municipal_sources.load(
+                parcel.information.municipality
+            )
+            planning_text_sources.extend(supplemental_sources)
+            warnings.extend(supplemental_warnings)
             progress(97, "Checking municipal pre-emption provisions…")
             preemption_right = extract_preemption_right(
                 planning_text_sources, contexts, parcel.information.municipality
@@ -254,6 +262,7 @@ class ParcelSearchService:
             pis.close()
             site_analysis.close()
             downloader.close()
+            municipal_sources.close()
 
     def _prepare_map_evidence(
         self,

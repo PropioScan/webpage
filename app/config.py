@@ -157,6 +157,7 @@ class Settings:
             self.data_dir / "result_cache",
             self.data_dir / "logs",
             self.data_dir / "traffic",
+            self.data_dir / "municipal_sources",
         ):
             path.mkdir(parents=True, exist_ok=True)
 

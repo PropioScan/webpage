@@ -9,7 +9,7 @@ from pathlib import Path
 from .models import SearchResult
 
 
-RESULT_SCHEMA_VERSION = 4
+RESULT_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,21 @@ class _Topic:
     aliases: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _KranjEUPProfile:
+    planning_unit: str
+    land_use: str
+    max_fi: str
+    max_fz: str
+    min_open_space: str
+    max_floors: str
+    urban_form: str
+    regulation_method: str
+    special_provision: str
+    source: PlanningTextSource
+    page_number: int
+
+
 TOPICS: tuple[_Topic, ...] = (
     _Topic(
         "activities",
@@ -230,8 +245,12 @@ def extract_planning_conditions(
     sources: list[PlanningTextSource], contexts: list[PlanningContext]
 ) -> list[PlanningCondition]:
     context_terms = _context_terms(contexts)
+    municipal_overrides = _kranj_condition_overrides(sources, contexts)
     conditions: list[PlanningCondition] = []
     for topic in TOPICS:
+        if topic.key in municipal_overrides:
+            conditions.append(municipal_overrides[topic.key])
+            continue
         candidate = _best_candidate(topic, sources, context_terms)
         if candidate is None:
             conditions.append(
@@ -255,6 +274,354 @@ def extract_planning_conditions(
             )
         )
     return conditions
+
+
+def _kranj_condition_overrides(
+    sources: list[PlanningTextSource], contexts: list[PlanningContext]
+) -> dict[str, PlanningCondition]:
+    """Build contextual Kranj PIP results from the current official text and EUP table."""
+    ordinance = next(
+        (
+            source
+            for source in sources
+            if "neuradno-precisceno-besedilo.pdf" in source.url.casefold()
+        ),
+        None,
+    )
+    annex = next(
+        (
+            source
+            for source in sources
+            if "preglednica_20eup.pdf" in source.url.casefold()
+        ),
+        None,
+    )
+    planning_unit = next(
+        (context.planning_unit for context in contexts if context.planning_unit), None
+    )
+    land_use_code = next(
+        (context.land_use_code for context in contexts if context.land_use_code), None
+    )
+    if ordinance is None or annex is None or not planning_unit or not land_use_code:
+        return {}
+
+    profile = _extract_kranj_eup_profile(annex, planning_unit)
+    if profile is None:
+        return {}
+
+    overrides: dict[str, PlanningCondition] = {}
+
+    land_use_section = _find_land_use_section(ordinance, land_use_code)
+    if land_use_section:
+        excerpt, page = land_use_section
+        overrides["activities"] = _available_condition(
+            "activities", excerpt, ordinance, [page]
+        )
+        overrides["objects"] = _available_condition(
+            "objects", excerpt, ordinance, [page]
+        )
+
+    section_map = {
+        "construction": ("2.1.2 Dopustne vrste gradenj",),
+        "functional_design": (
+            "2.4.1.1 Urbanistično oblikovanje - splošni pogoji",
+        ),
+        "surroundings": ("2.4.10 Pogoji za oblikovanje okolice objektov",),
+        "building_plot": (
+            "2.5.1 Pogoji za oblikovanje parcel, namenjenih gradnji",
+        ),
+        "environment": ("2.7.3.1 Splošni pogoji",),
+        "hazards": ("2.7.5.1 Splošni pogoji",),
+    }
+    page_hints = {
+        "construction": range(20, 28),
+        "functional_design": range(27, 31),
+        "surroundings": range(39, 43),
+        "building_plot": range(40, 44),
+        "environment": range(54, 59),
+        "hazards": range(59, 64),
+    }
+    for key, aliases in section_map.items():
+        candidate = _find_exact_section(
+            ordinance, aliases, page_hints=page_hints.get(key)
+        )
+        if candidate:
+            excerpt, page = candidate
+            overrides[key] = _available_condition(key, excerpt, ordinance, [page])
+
+    eup = profile.planning_unit
+    overrides["development_type"] = _available_condition(
+        "development_type",
+        (
+            f"Za EUP {eup} je določen način urbanističnega oblikovanja "
+            f"»{profile.urban_form}«. Pri gručasti zazidavi je treba ohranjati "
+            "tradicionalni vzorec stavb v gručah, obstoječe dominante, značilne "
+            "poglede in avtohtono vegetacijo na robu naselja."
+        ),
+        annex,
+        [profile.page_number],
+    )
+    overrides["size"] = _available_condition(
+        "size",
+        (
+            f"Za EUP {eup} je največja etažnost {profile.max_floors}. "
+            f"Največji faktor zazidanosti (FZ): {_display_fz(profile.max_fz)}. "
+            "Tlorisni gabarit je treba določiti glede na namen stavbe, velikost "
+            "parcele in dovoljeno stopnjo izkoriščenosti."
+        ),
+        annex,
+        [profile.page_number],
+    )
+    overrides["utilization"] = _available_condition(
+        "utilization",
+        (
+            f"Za EUP {eup}: največji FI {_display_optional(profile.max_fi)}, "
+            f"največji FZ {_display_fz(profile.max_fz)}, najmanjši delež odprtih "
+            f"bivalnih površin (OBP) {profile.min_open_space} in največja "
+            f"etažnost {profile.max_floors}. Način urejanja: "
+            f"{profile.regulation_method}."
+        ),
+        annex,
+        [profile.page_number],
+    )
+    overrides["roof_facade"] = _available_condition(
+        "roof_facade",
+        (
+            "Za namensko rabo SK so dovoljene hiše vaškega tipa, eno- in "
+            "dvostanovanjske prostostoječe hiše, nestanovanjske kmetijske "
+            "stavbe ter v odloku navedeni drugi stavbni tipi. Naklon in oblika "
+            "strehe, kritina, fasada, gabarit ter materiali se določijo po "
+            "izbranem stavbnem tipu v 17. členu; zasnova se mora prilagoditi "
+            "lokalni tradiciji in okoliški pozidavi."
+        ),
+        ordinance,
+        [30, 31, 32, 33, 34, 35, 36],
+    )
+    overrides["location_setbacks"] = _available_condition(
+        "location_setbacks",
+        (
+            "Za rabo SK morajo biti nadzemni deli novih zahtevnih in manj "
+            "zahtevnih stavb od meje parcele praviloma odmaknjeni najmanj 4,0 m. "
+            "Pri manj zahtevnih objektih je s pisnim soglasjem sosedov dovoljen "
+            "manjši odmik, vendar ne manj kot 2,5 m. Od javne ceste velja za "
+            "stavbe praviloma najmanj 5,0 m, za nezahtevne in enostavne objekte "
+            "pa 2,0 m; upoštevati je treba tudi gradbene linije in pogoje upravljavca."
+        ),
+        ordinance,
+        [25, 26, 27],
+    )
+    overrides["road_parking"] = _available_condition(
+        "road_parking",
+        (
+            "Parcela, namenjena gradnji, mora imeti zagotovljen dovoz in dostop "
+            "do javne ceste. Cestni priključek in prometna ureditev morata "
+            "izpolnjevati pogoje upravljavca ter zagotavljati varen promet. "
+            "Potrebno število parkirnih mest se zagotovi na parceli glede na "
+            "vrsto in obseg dejavnosti; urediti je treba tudi manipulativne in "
+            "intervencijske površine."
+        ),
+        ordinance,
+        [38, 42, 44],
+    )
+    overrides["utilities"] = _available_condition(
+        "utilities",
+        (
+            "Objekte je treba priključiti na razpoložljivo gospodarsko javno "
+            "infrastrukturo pod pogoji upravljavcev. Odlok ločeno ureja vodovod, "
+            "odvajanje komunalnih in padavinskih voda, prometno infrastrukturo, "
+            "električno energijo, plin ter komunikacijsko omrežje; če omrežje ni "
+            "na voljo, so dopustne le rešitve, ki jih odlok in področni predpisi "
+            "izrecno omogočajo."
+        ),
+        ordinance,
+        [42, 43, 44, 46, 47, 48, 49],
+    )
+    overrides["heritage_nature"] = _available_condition(
+        "heritage_nature",
+        (
+            "Na objektih in območjih kulturne dediščine veljajo varstveni režimi "
+            "ter kulturnovarstveni pogoji in soglasje. Na zavarovanih območjih, "
+            "naravnih vrednotah in območjih Natura 2000 je treba posege načrtovati "
+            "tako, da se ohranjajo varovane lastnosti; kadar bi jih poseg lahko "
+            "ogrozil, so potrebni naravovarstveni pogoji in soglasje. Dejanski "
+            "presek parcele je prikazan v sklopu varovanj in omejitev."
+        ),
+        ordinance,
+        [51, 52, 54, 55, 56],
+    )
+    overrides["health"] = _available_condition(
+        "health",
+        (
+            "Za SK je določena III. stopnja varstva pred hrupom in I. stopnja "
+            "varstva pred elektromagnetnim sevanjem. Pri stanovanjskih prostorih "
+            "je treba praviloma zagotoviti predpisano osončenje vsaj enega "
+            "prostora za bivanje. Upoštevati je treba še zahteve glede vodnih "
+            "virov, svetlobnega onesnaževanja, neoviranega dostopa in požarne varnosti."
+        ),
+        ordinance,
+        [57, 63, 64, 65],
+    )
+    return overrides
+
+
+def _available_condition(
+    key: str,
+    description: str,
+    source: PlanningTextSource,
+    pages: list[int],
+) -> PlanningCondition:
+    topic = next(item for item in TOPICS if item.key == key)
+    return PlanningCondition(
+        key=topic.key,
+        title=topic.title,
+        description=description.strip(),
+        available=True,
+        source_title=source.title,
+        source_url=source.url,
+        pages=pages,
+    )
+
+
+def _extract_kranj_eup_profile(
+    source: PlanningTextSource, planning_unit: str
+) -> _KranjEUPProfile | None:
+    target = _normalize(planning_unit)
+    columns = (
+        (20, 45),
+        (45, 67),
+        (67, 80),
+        (80, 104),
+        (104, 121),
+        (121, 147),
+        (147, 180),
+        (180, 202),
+        (202, None),
+    )
+    for page_number, raw_page in enumerate(source.pages, start=1):
+        lines = raw_page.splitlines()
+        for index, line in enumerate(lines):
+            if _normalize(line[columns[0][0] : columns[0][1]]) != target:
+                continue
+            def value(column: tuple[int, int | None]) -> str:
+                return (
+                    re.sub(r"\s+", " ", line[column[0] : column[1]]).strip()
+                    or "/"
+                )
+
+            def continued_value(column: tuple[int, int | None]) -> str:
+                parts = [value(column)]
+                cursor = index - 1
+                while cursor >= 0:
+                    previous = lines[cursor]
+                    if _normalize(previous[20:45]) or _normalize(previous[45:67]):
+                        break
+                    part = re.sub(
+                        r"\s+", " ", previous[column[0] : column[1]]
+                    ).strip()
+                    if not part:
+                        break
+                    parts.insert(0, part)
+                    cursor -= 1
+                cursor = index + 1
+                while cursor < len(lines):
+                    following = lines[cursor]
+                    if _normalize(following[20:45]) or _normalize(following[45:67]):
+                        break
+                    part = re.sub(
+                        r"\s+", " ", following[column[0] : column[1]]
+                    ).strip()
+                    if not part:
+                        break
+                    parts.append(part)
+                    cursor += 1
+                return " ".join(parts).strip() or "/"
+
+            return _KranjEUPProfile(
+                planning_unit=re.sub(r"\s+", " ", line[20:45]).strip(),
+                land_use=value(columns[1]),
+                max_fi=value(columns[2]),
+                max_fz=continued_value(columns[3]),
+                min_open_space=value(columns[4]),
+                max_floors=value(columns[5]),
+                urban_form=value(columns[6]),
+                regulation_method=value(columns[7]),
+                special_provision=value(columns[8]),
+                source=source,
+                page_number=page_number,
+            )
+    return None
+
+
+def _find_land_use_section(
+    source: PlanningTextSource, land_use_code: str
+) -> tuple[str, int] | None:
+    code = re.escape(_normalize(land_use_code))
+    pattern = re.compile(rf"^\(\d+\)\s+{code}\s*[-–]")
+    for page_number, raw_page in enumerate(source.pages, start=1):
+        lines = _single_column_lines(raw_page)
+        for index, line in enumerate(lines):
+            if pattern.search(_normalize(line)):
+                return _excerpt(lines, index), page_number
+    return None
+
+
+def _find_exact_section(
+    source: PlanningTextSource,
+    aliases: tuple[str, ...],
+    *,
+    page_hints: range | None = None,
+) -> tuple[str, int] | None:
+    normalized_aliases = tuple(_normalize(alias) for alias in aliases)
+    for page_number, raw_page in enumerate(source.pages, start=1):
+        if page_hints is not None and page_number not in page_hints:
+            continue
+        lines = _single_column_lines(raw_page)
+        for index, line in enumerate(lines):
+            normalized_line = _normalize(line)
+            if any(alias in normalized_line for alias in normalized_aliases):
+                excerpt = _excerpt(lines, index)
+                if len(excerpt) < 70:
+                    excerpt = _section_excerpt(lines, index)
+                if len(excerpt) >= 70:
+                    return excerpt, page_number
+    return None
+
+
+def _section_excerpt(lines: list[str], start: int) -> str:
+    """Keep short nested headings until the first substantive section text."""
+    selected: list[str] = []
+    length = 0
+    for line in lines[start : start + 18]:
+        if selected and length >= 240 and _looks_like_new_major_heading(line):
+            break
+        selected.append(line)
+        length += len(line) + 1
+        if length >= 1_050:
+            break
+    result = " ".join(selected)
+    if len(result) > 1_100:
+        return result[:1_097].rstrip() + "…"
+    return result
+
+
+def _single_column_lines(raw_text: str) -> list[str]:
+    dehyphenated = re.sub(r"(?<=\w)-\s*\n\s*(?=\w)", "", raw_text)
+    return [
+        cleaned
+        for line in dehyphenated.splitlines()
+        if (cleaned := re.sub(r"\s+", " ", line).strip())
+    ]
+
+
+def _display_optional(value: str) -> str:
+    return "ni posebej določen" if value.strip() == "/" else value
+
+
+def _display_fz(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", value).strip(" ,")
+    if "stan. hiše" in normalized and "kmetije" in normalized:
+        return normalized.replace("stan. hiše", "stanovanjske hiše")
+    return _display_optional(normalized)
 
 
 def extract_preemption_right(
@@ -450,8 +817,6 @@ def _best_candidate(
             if not lines:
                 continue
             normalized_lines = [_normalize(line) for line in lines]
-            normalized_page = " ".join(normalized_lines)
-            context_score = sum(term in normalized_page for term in context_terms)
             for alias_index, alias in enumerate(topic.aliases):
                 normalized_alias = _normalize(alias)
                 for line_index, normalized_line in enumerate(normalized_lines):
@@ -460,12 +825,22 @@ def _best_candidate(
                     excerpt = _excerpt(lines, line_index)
                     if len(excerpt) < 70:
                         continue
+                    normalized_excerpt = _normalize(excerpt)
+                    context_score = sum(
+                        _contains_context_term(normalized_excerpt, term)
+                        for term in context_terms
+                    )
+                    exact_heading = normalized_line == normalized_alias
+                    normalized_title = _normalize(source.title)
                     score = (
                         len(normalized_alias) / 20
                         + (len(topic.aliases) - alias_index) * 4
                         + context_score * 3
                         + min(len(excerpt), 900) / 900
-                        + (1.5 if "odlok" in _normalize(source.title) else 0)
+                        + (3 if exact_heading else 0)
+                        + (1.5 if "odlok" in normalized_title else 0)
+                        + (4 if "precisceno besedilo" in normalized_title else 0)
+                        - (2 if "spremembe" in normalized_title else 0)
                     )
                     candidates.append((score, excerpt, source, page_number))
                     break

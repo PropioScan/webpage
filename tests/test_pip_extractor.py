@@ -61,6 +61,91 @@ def test_only_textual_planning_documents_are_selected():
     assert not is_textual_planning_document("grafika/list_01.pdf")
 
 
+def test_kranj_il1_uses_contextual_official_eup_values_for_all_topics():
+    ordinance_pages = [""] * 65
+    ordinance_pages[12] = """
+    (6) SK – površine podeželskih naselij:
+    - vrste objektov glede na namen:
+    eno in dvostanovanjske prostostoječe stavbe ter nestanovanjske kmetijske stavbe,
+    stavbe spremljajočih dejavnosti, trgovske stavbe do 300 m2 in delavnice do 5 zaposlenih.
+    """
+    ordinance_pages[23] = """
+    2.1.2 Dopustne vrste gradenj
+    11. člen
+    (vrste gradenj)
+    Dopustne so gradnja novih objektov, rekonstrukcije, vzdrževalna dela, odstranitve in
+    spremembe namembnosti v skladu z dovoljeno namembnostjo stavb v posamezni EUP.
+    """
+    ordinance_pages[27] = """
+    2.4.1.1 Urbanistično oblikovanje - splošni pogoji
+    Posegi morajo ohranjati oblikovno enovitost EUP ter se prilagoditi okoliškim objektom,
+    njihovi legi, orientaciji, gradbenim masam, naklonu strešin, kritini in smerem slemen.
+    """
+    ordinance_pages[40] = """
+    2.4.10 Pogoji za oblikovanje okolice objektov
+    Višinske razlike se urejajo s travnatimi brežinami, zasaditve pa z avtohtonimi vrstami.
+    Ohranjati je treba kakovostno obstoječo vegetacijo in sanirati površine po gradnji.
+    2.5.1 Pogoji za oblikovanje parcel, namenjenih gradnji,
+    Pri določitvi velikosti in oblike se upoštevajo tip objekta, dovoljena izraba,
+    odmiki, dostopi, parkirna mesta, manipulativne in intervencijske površine.
+    """
+    ordinance_pages[55] = """
+    2.7.3.1 Splošni pogoji
+    Gradnje so dopustne, če čezmerno ne obremenjujejo okolja in ne presegajo mejnih
+    vrednosti emisij; vplive je treba preprečiti oziroma omejiti z omilitvenimi ukrepi.
+    """
+    ordinance_pages[60] = """
+    2.7.5.1 Splošni pogoji
+    Načrtovanje in gradnjo je treba zasnovati tako, da se preprečijo oziroma zmanjšajo
+    škodljivi vplivi naravnih nesreč ter zagotovijo požarna varnost in varni dostopi.
+    """
+    ordinance = PlanningTextSource(
+        title="MOK – Neuradno prečiščeno besedilo Odloka o IPN",
+        url="https://www.kranj.si/neuradno-precisceno-besedilo.pdf",
+        pages=ordinance_pages,
+    )
+    annex = PlanningTextSource(
+        title="MOK – Priloga 1: Preglednica enot urejanja prostora",
+        url=(
+            "https://prostor.kranj.si/prostorski-akti/datoteke/3/x.pdf/"
+            "Ipn_mok_odlok_priloga_1_preglednica_20EUP.pdf"
+        ),
+        pages=[
+            "",
+            "",
+            "\n".join(
+                [
+                    "                                                                                    za stan. hiše =",
+                    "                            IL 1                      SK                  /        0,35, za kmetije          25%                K+P+1               gručasta zazidava                 PIP                      /",
+                    " ILOVKA                                                                                 = 0,40",
+                ]
+            ),
+        ],
+    )
+    contexts = [
+        PlanningContext(
+            land_use_code="SK",
+            land_use_description="Stanovanjske površine s kmetijsko dejavnostjo",
+            planning_unit="IL 1",
+        )
+    ]
+
+    conditions = extract_planning_conditions([ordinance, annex], contexts)
+
+    assert len(conditions) == 17
+    assert all(condition.available for condition in conditions)
+    by_key = {condition.key: condition for condition in conditions}
+    assert "0,35" in by_key["utilization"].description
+    assert "0,40" in by_key["utilization"].description
+    assert "25%" in by_key["utilization"].description
+    assert "K+P+1" in by_key["size"].description
+    assert "gručasta zazidava" in by_key["development_type"].description
+    assert "Način urejanja: PIP" in by_key["utilization"].description
+    assert by_key["construction"].pages == [24]
+    assert "rekonstrukcije" in by_key["construction"].description
+    assert all("KR P17/2" not in item.description for item in conditions)
+
+
 def test_preemption_right_is_extracted_with_source_page_and_parcel_context():
     source = PlanningTextSource(
         title="Odlok o OPN – odlok.pdf",
