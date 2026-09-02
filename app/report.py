@@ -748,6 +748,50 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         else:
             regime_fields.append(ReportField(group, "Preverjeni spletni sloji niso vrnili preseka"))
 
+    preemption = result.preemption_right
+    if preemption and preemption.status in {"applies", "provision_found"}:
+        page_label = (
+            f" · str. {', '.join(str(page) for page in preemption.pages)}"
+            if preemption.pages
+            else ""
+        )
+        preemption_fields = (
+            ReportField("Stanje", preemption.label),
+            ReportField("Ocena za parcelo", preemption.detail),
+            ReportField(
+                "Zaznana določba",
+                _clip(preemption.excerpt or "Besedilni izvleček ni na voljo", 800),
+            ),
+            ReportField("Pravna podlaga", preemption.legal_basis),
+            ReportField(
+                "Vir",
+                f"{preemption.source_title or 'Veljavni občinski prostorski akt'}{page_label}",
+            ),
+        )
+    else:
+        preemption_fields = (
+            ReportField(
+                "Stanje",
+                preemption.label if preemption else "Samodejni pregled ni bil izveden",
+            ),
+            ReportField(
+                "Rezultat samodejnega pregleda",
+                preemption.detail
+                if preemption
+                else "Podatek je treba preveriti pri pristojni občini.",
+            ),
+            ReportField(
+                "Pravna podlaga",
+                preemption.legal_basis
+                if preemption
+                else "199.–201. člen Zakona o urejanju prostora (ZUreP-3)",
+            ),
+            ReportField(
+                "Pregledani besedilni dokumenti",
+                str(preemption.checked_document_count if preemption else 0),
+            ),
+        )
+
     assessment_code_meanings = [
         f"{item.code} – {item.name or 'opis namenske rabe ni na voljo'}"
         for item in (result.land_use_assessment.items if result.land_use_assessment else [])
@@ -823,9 +867,11 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         ReportSection(
             5,
             "PREDKUPNA PRAVICA",
-            "review",
-            (ReportField("Stanje", "Predkupna pravica občine ali države ni bila samodejno potrjena oziroma izključena"),),
-            "Pred pravnim poslom zahtevajte uradno izjavo pristojne občine in po potrebi preverite predkupno pravico države.",
+            "partial"
+            if preemption and preemption.status in {"applies", "provision_found"}
+            else "review",
+            preemption_fields,
+            "Območje predkupne pravice določi občinski svet z odlokom. Zaznana omemba v OPN je pomemben dokaz, ni pa enakovredna parcelnemu potrdilu. Pred prodajo zahtevajte uradno potrdilo občine.",
         ),
         ReportSection(
             6,

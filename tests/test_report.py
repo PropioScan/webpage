@@ -12,6 +12,7 @@ from app.models import (
     PlanningContext,
     PlanningLandUseMap,
     PlanningMapEvidence,
+    PreemptionRightAssessment,
     SearchResult,
     SpatialFinding,
 )
@@ -131,6 +132,33 @@ def test_section_six_uses_requested_legal_regime_columns():
     assert any(label.startswith("Geometrija") for label in labels)
     assert "Podzemni kabelski vod 0,4 kV" in values
     assert "112. člen Energetskega zakona (EZ-2)" in values
+
+
+def test_section_five_contains_the_detected_municipal_preemption_provision():
+    report_result = result()
+    report_result.preemption_right = PreemptionRightAssessment(
+        status="provision_found",
+        label="V prostorskem aktu je zaznana določba o predkupni pravici",
+        detail="Zadetek je povezan z EUP ŠE-123; potreben je občinski pregled.",
+        source_title="Odlok o OPN – odlok.pdf",
+        source_url="/api/files/1/odlok.pdf",
+        pages=[42],
+        excerpt="Občina uveljavlja predkupno pravico na stavbnih zemljiščih.",
+        checked_document_count=2,
+    )
+
+    section = build_report_sections(report_result)[4]
+
+    assert section.status == "partial"
+    assert [field.label for field in section.fields] == [
+        "Stanje",
+        "Ocena za parcelo",
+        "Zaznana določba",
+        "Pravna podlaga",
+        "Vir",
+    ]
+    assert "predkupno pravico" in section.fields[2].value
+    assert "str. 42" in section.fields[4].value
 
 
 def test_generated_pdf_embeds_the_legal_regime_map_appendix(tmp_path):

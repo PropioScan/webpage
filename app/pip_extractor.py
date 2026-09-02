@@ -5,7 +5,7 @@ import statistics
 import unicodedata
 from dataclasses import dataclass
 
-from .models import PlanningCondition, PlanningContext
+from .models import PlanningCondition, PlanningContext, PreemptionRightAssessment
 
 
 @dataclass(frozen=True)
@@ -204,6 +204,21 @@ _MISSING_DESCRIPTION = (
     "izluščen. Pogoje je treba preveriti v celotnem odloku oziroma pri občini."
 )
 
+_PREEMPTION_LEGAL_BASIS = (
+    "199.–201. člen Zakona o urejanju prostora (ZUreP-3) in veljavni občinski odlok"
+)
+_GORENJA_VAS_PREEMPTION_URL = (
+    "https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina/"
+    "2021-01-1451/odlok-o-predkupni-pravici-obcine-gorenja-vas---poljane"
+)
+_BUILDING_LAND_CODES = frozenset(
+    {
+        "A", "B", "BC", "BD", "BT", "C", "CD", "CU", "E", "I", "IG", "IK",
+        "IP", "O", "P", "PC", "PH", "PL", "PO", "PZ", "PŽ", "S", "SB", "SK",
+        "SP", "SS", "T", "Z", "ZD", "ZK", "ZP", "ZS",
+    }
+)
+
 
 def is_textual_planning_document(source_name: str) -> bool:
     normalized = _normalize(source_name)
@@ -240,6 +255,187 @@ def extract_planning_conditions(
             )
         )
     return conditions
+
+
+def extract_preemption_right(
+    sources: list[PlanningTextSource],
+    contexts: list[PlanningContext],
+    municipality: str | None = None,
+) -> PreemptionRightAssessment:
+    """Find municipal pre-emption provisions without inferring a spatial match."""
+    municipal_result = _municipal_preemption_right(municipality, contexts, len(sources))
+    if municipal_result is not None:
+        return municipal_result
+    if not sources:
+        return PreemptionRightAssessment(
+            status="unavailable",
+            label="Samodejni pregled ni bil mogoč",
+            detail=(
+                "Besedilni del veljavnega OPN oziroma občinskega odloka ni bil "
+                "na voljo za pregled. Podatek je treba pridobiti pri pristojni občini."
+            ),
+            legal_basis=_PREEMPTION_LEGAL_BASIS,
+        )
+
+    context_terms = _context_terms(contexts)
+    candidates: list[tuple[float, str, PlanningTextSource, int, tuple[str, ...]]] = []
+    for source in sources:
+        for page_number, raw_page in enumerate(source.pages, start=1):
+            lines = _clean_lines(raw_page)
+            if not lines:
+                continue
+            normalized_lines = [_normalize(line) for line in lines]
+            normalized_page = " ".join(normalized_lines)
+            if "predkupn" not in normalized_page or "pravic" not in normalized_page:
+                continue
+            matched_terms = tuple(
+                term for term in context_terms if _contains_context_term(normalized_page, term)
+            )
+            for line_index, normalized_line in enumerate(normalized_lines):
+                if "predkupn" not in normalized_line or "pravic" not in normalized_line:
+                    continue
+                excerpt = _preemption_excerpt(lines, line_index)
+                normalized_excerpt = _normalize(excerpt)
+                score = 4 + min(len(excerpt), 950) / 950
+                if "obmocje predkupne pravice" in normalized_excerpt:
+                    score += 9
+                if "uveljavlja predkupno pravico" in normalized_excerpt:
+                    score += 8
+                if "odlok o predkupni pravici" in normalized_excerpt:
+                    score += 8
+                if "stavbn" in normalized_excerpt or "ureditven" in normalized_excerpt:
+                    score += 4
+                if "odlok" in _normalize(source.title):
+                    score += 3
+                score += min(len(matched_terms), 3) * 2
+                candidates.append(
+                    (score, excerpt, source, page_number, matched_terms[:4])
+                )
+
+    if not candidates:
+        return PreemptionRightAssessment(
+            status="not_found",
+            label="Določba v pregledanih dokumentih ni bila zaznana",
+            detail=(
+                f"Pregledanih je bilo {len(sources)} besedilnih dokumentov veljavnih "
+                "prostorskih aktov. Odsotnost besedilnega zadetka ne izključuje "
+                "posebnega občinskega odloka ali druge veljavne evidence."
+            ),
+            legal_basis=_PREEMPTION_LEGAL_BASIS,
+            checked_document_count=len(sources),
+        )
+
+    _, excerpt, source, page_number, matched_terms = max(
+        candidates, key=lambda item: item[0]
+    )
+    if matched_terms:
+        context_note = (
+            "Na isti strani so zaznane tudi oznake prostorskega konteksta parcele "
+            f"({', '.join(matched_terms)}). "
+        )
+    else:
+        context_note = "Neposredna povezava določbe z oznako EUP ali namensko rabo parcele ni bila zaznana. "
+    return PreemptionRightAssessment(
+        status="provision_found",
+        label="V prostorskem aktu je zaznana določba o predkupni pravici",
+        detail=(
+            context_note
+            + "Besedilni zadetek sam ne dokazuje, da občinsko območje predkupne "
+            "pravice geometrijsko vključuje parcelo; pred prodajo je potrebno potrdilo občine."
+        ),
+        legal_basis=_PREEMPTION_LEGAL_BASIS,
+        source_title=source.title,
+        source_url=source.url,
+        pages=[page_number],
+        excerpt=excerpt,
+        checked_document_count=len(sources),
+    )
+
+
+def _municipal_preemption_right(
+    municipality: str | None,
+    contexts: list[PlanningContext],
+    checked_document_count: int,
+) -> PreemptionRightAssessment | None:
+    normalized_municipality = _normalize(municipality or "").replace("–", "-")
+    if normalized_municipality not in {"gorenja vas-poljane", "gorenja vas - poljane"}:
+        return None
+
+    matching_uses = [
+        context
+        for context in contexts
+        if (context.land_use_code or "").strip().upper() in _BUILDING_LAND_CODES
+    ]
+    legal_basis = (
+        "Odlok o predkupni pravici Občine Gorenja vas - Poljane "
+        "(Uradni list RS, št. 67/2021), 2. in 3. člen; "
+        "199.–201. člen ZUreP-3"
+    )
+    source_title = (
+        "Odlok o predkupni pravici Občine Gorenja vas - Poljane "
+        "(Uradni list RS, št. 67/2021)"
+    )
+    excerpt = (
+        "2. in 3. člen odloka določata območje predkupne pravice tudi na "
+        "stavbnih zemljiščih, kot so določena v veljavnih občinskih prostorskih aktih."
+    )
+    if matching_uses:
+        use_descriptions = []
+        for context in matching_uses:
+            code = (context.land_use_code or "").strip().upper()
+            share = (
+                f" ({context.parcel_share_percent:g} % parcele)"
+                if context.parcel_share_percent is not None
+                else ""
+            )
+            use_descriptions.append(
+                f"{code} – {context.land_use_description or 'stavbno zemljišče'}{share}"
+            )
+        return PreemptionRightAssessment(
+            status="applies",
+            label="Parcela posega v območje predkupne pravice občine",
+            detail=(
+                "Veljavni občinski odlok vključuje stavbna zemljišča, prostorski "
+                f"presek PIS pa je na parceli zaznal: {'; '.join(use_descriptions)}. "
+                "To je avtomatizirana ugotovitev na podlagi javnih evidenc; pred "
+                "prodajo pridobite uradno izjavo občine o uveljavljanju pravice."
+            ),
+            legal_basis=legal_basis,
+            source_title=source_title,
+            source_url=_GORENJA_VAS_PREEMPTION_URL,
+            excerpt=excerpt,
+            checked_document_count=checked_document_count,
+        )
+
+    return PreemptionRightAssessment(
+        status="provision_found",
+        label="Za občino je bil najden veljavni odlok o predkupni pravici",
+        detail=(
+            "Odlok poleg stavbnih zemljišč vključuje tudi nekatera druga območja, "
+            "vendar razpoložljivi prostorski presek ne zadošča za zanesljivo "
+            "parcelno ugotovitev. Potrebna je uradna izjava občine."
+        ),
+        legal_basis=legal_basis,
+        source_title=source_title,
+        source_url=_GORENJA_VAS_PREEMPTION_URL,
+        excerpt=excerpt,
+        checked_document_count=checked_document_count,
+    )
+
+
+def _contains_context_term(normalized_text: str, term: str) -> bool:
+    if len(term) <= 3:
+        return bool(re.search(rf"(?<!\w){re.escape(term)}(?!\w)", normalized_text))
+    return term in normalized_text
+
+
+def _preemption_excerpt(lines: list[str], match_index: int) -> str:
+    start = max(0, match_index - 1)
+    selected = lines[start : match_index + 10]
+    excerpt = " ".join(selected)
+    if len(excerpt) > 1_100:
+        return excerpt[:1_097].rstrip() + "…"
+    return excerpt
 
 
 def _best_candidate(

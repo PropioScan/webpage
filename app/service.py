@@ -19,6 +19,7 @@ from .pdf_parser import PDFParser, find_parcel_mentions
 from .pip_extractor import (
     PlanningTextSource,
     extract_planning_conditions,
+    extract_preemption_right,
     is_textual_planning_document,
 )
 from .pis import PISClient
@@ -188,6 +189,10 @@ class ParcelSearchService:
                                 match=match,
                             )
                         )
+            progress(97, "Checking municipal pre-emption provisions…")
+            preemption_right = extract_preemption_right(
+                planning_text_sources, contexts, parcel.information.municipality
+            )
             progress(98, "Preparing the result…")
             planning_conditions = extract_planning_conditions(
                 planning_text_sources, contexts
@@ -237,6 +242,7 @@ class ParcelSearchService:
                 parcel_map=site_result.parcel_map,
                 planning_land_use_map=build_planning_land_use_map(parcel, map_evidence),
                 planning_conditions=planning_conditions,
+                preemption_right=preemption_right,
                 documents=documents,
                 warnings=warnings,
                 openai_usage=summarizer.usage,

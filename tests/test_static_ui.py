@@ -111,6 +111,16 @@ def test_location_report_renders_seventeen_planning_condition_descriptions():
     assert "Prikazanih je 17 standardiziranih vsebinskih sklopov" in script
 
 
+def test_location_report_renders_the_municipal_preemption_check():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "const preemptionRight = result.preemption_right" in script
+    assert '["applies", "provision_found"].includes(preemptionRight?.status)' in script
+    assert '["Zaznana določba", preemptionRight.excerpt' in script
+    assert "199.–201. člen Zakona o urejanju prostora (ZUreP-3)" in script
+    assert 'link(sourceUrl, "Odpri vir ↗", "official-inline-source")' in script
+
+
 def test_document_explanations_are_presented_in_slovenian():
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 

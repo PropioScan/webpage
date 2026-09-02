@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.models import ParcelInformation, SearchResult
-from app.result_cache import ParcelResultCache
+from app.result_cache import RESULT_SCHEMA_VERSION, ParcelResultCache
 
 
 def _result(parcel_number: str = "314/4") -> SearchResult:
@@ -52,3 +52,7 @@ def test_new_successful_result_replaces_the_previous_copy(tmp_path: Path) -> Non
     assert cached is not None
     assert cached.result.parcel.area_m2 == 999
     assert cached.stored_at == second_at
+
+
+def test_cache_schema_requires_the_preemption_assessment_version() -> None:
+    assert RESULT_SCHEMA_VERSION >= 4

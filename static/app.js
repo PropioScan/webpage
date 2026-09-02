@@ -538,6 +538,7 @@ function renderOfficialForm(result, jobId) {
   const contexts = result.planning_context || [];
   const acts = result.planning_acts || [];
   const planningConditions = result.planning_conditions || [];
+  const preemptionRight = result.preemption_right;
   const assessment = result.land_use_assessment;
   const planningMap = result.planning_land_use_map;
   const planningDrawing = (planningMap?.evidence || []).find((item) => item.preview_url)
@@ -586,6 +587,25 @@ function renderOfficialForm(result, jobId) {
       return [`${index + 1}. ${condition.title}`, `${condition.description}${source}`];
     })
     : [["Prostorski izvedbeni pogoji", "Samodejni izvleček iz besedilnega dela odloka ni bil pripravljen"]];
+  const hasPreemptionEvidence = ["applies", "provision_found"].includes(preemptionRight?.status);
+  const preemptionRows = hasPreemptionEvidence
+    ? [
+      ["Stanje", preemptionRight.label],
+      ["Ocena za parcelo", preemptionRight.detail],
+      ["Zaznana določba", preemptionRight.excerpt || "Besedilni izvleček ni na voljo"],
+      ["Pravna podlaga", preemptionRight.legal_basis],
+      [
+        "Vir",
+        `${preemptionRight.source_title || "Veljavni občinski prostorski akt"}${formatPageReferences(preemptionRight.pages)}`,
+        preemptionRight.source_url,
+      ],
+    ]
+    : [
+      ["Stanje", preemptionRight?.label || "Samodejni pregled ni bil izveden"],
+      ["Rezultat samodejnega pregleda", preemptionRight?.detail || "Podatek je treba preveriti pri pristojni občini."],
+      ["Pravna podlaga", preemptionRight?.legal_basis || "199.–201. člen Zakona o urejanju prostora (ZUreP-3)"],
+      ["Pregledani besedilni dokumenti", `${preemptionRight?.checked_document_count || 0}`],
+    ];
 
   const sections = [
     {
@@ -624,9 +644,9 @@ function renderOfficialForm(result, jobId) {
     {
       number: 5,
       title: "Predkupna pravica",
-      status: "review",
-      rows: [["Stanje", "Predkupna pravica občine ali države ni bila samodejno potrjena oziroma izključena"]],
-      hint: "Pred pravnim poslom zahtevajte uradno izjavo pristojne občine in po potrebi preverite predkupno pravico države.",
+      status: hasPreemptionEvidence ? "partial" : "review",
+      rows: preemptionRows,
+      hint: "Območje predkupne pravice določi občinski svet z odlokom. Zaznana omemba v OPN je pomemben dokaz, ni pa enakovredna parcelnemu potrdilu. Pred prodajo zahtevajte uradno potrdilo občine.",
     },
     {
       number: 6,
@@ -706,6 +726,11 @@ function formatReportDate(value) {
   }).format(date);
 }
 
+function formatPageReferences(pages) {
+  if (!pages?.length) return "";
+  return ` · str. ${pages.join(", ")}`;
+}
+
 async function downloadLocationReport(event) {
   event.preventDefault();
   event.stopPropagation();
@@ -780,9 +805,11 @@ function officialSection(sectionData) {
   header.append(title, element("span", `report-status is-${sectionData.status}`, statusLabel));
 
   const rows = element("div", "official-section-rows");
-  sectionData.rows.forEach(([label, value]) => {
+  sectionData.rows.forEach(([label, value, sourceUrl]) => {
     const row = element("div", "official-field-row");
-    row.append(element("span", "", label), element("strong", "", value || "Podatek ni na voljo"));
+    const valueCell = element("strong", "", value || "Podatek ni na voljo");
+    if (sourceUrl) valueCell.append(" ", link(sourceUrl, "Odpri vir ↗", "official-inline-source"));
+    row.append(element("span", "", label), valueCell);
     rows.append(row);
   });
   const hint = element("div", "official-hint");

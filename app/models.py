@@ -230,6 +230,18 @@ class PlanningCondition(BaseModel):
     pages: list[int] = Field(default_factory=list)
 
 
+class PreemptionRightAssessment(BaseModel):
+    status: Literal["applies", "provision_found", "not_found", "unavailable"]
+    label: str
+    detail: str
+    legal_basis: str = "199.–201. člen Zakona o urejanju prostora (ZUreP-3)"
+    source_title: str | None = None
+    source_url: str | None = None
+    pages: list[int] = Field(default_factory=list)
+    excerpt: str | None = None
+    checked_document_count: int = 0
+
+
 class SearchResult(BaseModel):
     parcel: ParcelInformation
     planning_context: list[PlanningContext] = Field(default_factory=list)
@@ -244,6 +256,7 @@ class SearchResult(BaseModel):
     parcel_map: ParcelMap | None = None
     planning_land_use_map: PlanningLandUseMap | None = None
     planning_conditions: list[PlanningCondition] = Field(default_factory=list)
+    preemption_right: PreemptionRightAssessment | None = None
     documents: list[DocumentResult] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     openai_usage: OpenAIUsage = Field(default_factory=OpenAIUsage)
