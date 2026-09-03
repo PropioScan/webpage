@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any
 
 import httpx
@@ -9,10 +11,12 @@ from shapely.errors import GEOSException
 from shapely.geometry import shape
 
 from .config import Settings
-from .errors import CheckerError, InvalidParcelReference, ParcelNotFound
+from .errors import CheckerError, InvalidParcelReference, ParcelNotFound, UpstreamServiceError
 from .http_client import ResilientHTTPClient, wfs_params
 from .models import (
     LandUseShare,
+    OwnershipAssessment,
+    OwnershipShare,
     ParcelBoundaryAssessment,
     ParcelInformation,
     ParcelReference,
@@ -22,6 +26,10 @@ from .models import (
 
 KN_WFS_URL = "https://ipi.eprostor.gov.si/wfs-si-gurs-kn/wfs"
 EV_WFS_URL = "https://ipi.eprostor.gov.si/wfs-si-gurs-ev/wfs"
+PUBLIC_OWNERS_URL = (
+    "https://ipi.eprostor.gov.si/javni-service-api/v1/external/"
+    "std-service/features"
+)
 PARCEL_REFERENCE_RE = re.compile(
     r"^\s*(?P<ko>\d{1,4})\s*(?:[-: ]|\s)\s*(?P<parcel>\d+(?:\s*/\s*\d+)?)\s*$"
 )
@@ -120,8 +128,16 @@ class GURSClient:
             valuation_record.get("properties", {}) if valuation_record else {}
         )
         valuation_eid = str(valuation_properties.get("EID_PARCELA") or eid)
-        units = self._valuation_units(valuation_eid)
-        land_use = self._land_use(valuation_eid)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            units_future = executor.submit(self._valuation_units, valuation_eid)
+            land_use_future = executor.submit(self._land_use, valuation_eid)
+            ownership_future = executor.submit(self._ownership, eid)
+            units = units_future.result()
+            land_use = land_use_future.result()
+            try:
+                ownership = ownership_future.result()
+            except CheckerError:
+                ownership = self._unavailable_ownership(eid)
         unit_values = [
             item.generalized_value_eur
             for item in units
@@ -167,6 +183,7 @@ class GURSClient:
             building_parcel=properties.get("GRAD_PARC"),
             restriction_recorded=properties.get("OMEJITEV"),
             boundary_assessment=boundary_assessment,
+            ownership=ownership,
             centroid_e=properties.get("E_CEN") or valuation_properties.get("E"),
             centroid_n=properties.get("N_CEN") or valuation_properties.get("N"),
             data_timestamp=timestamp,
@@ -308,6 +325,199 @@ class GURSClient:
             for feature in payload.get("features") or []
             if (p := feature.get("properties") or {})
         ]
+
+    def _ownership(self, eid: str) -> OwnershipAssessment:
+        source_url = f"https://ipi.eprostor.gov.si/jv/?eid={eid}" if eid else (
+            "https://ipi.eprostor.gov.si/jv/"
+        )
+        if not eid:
+            return OwnershipAssessment(
+                status="unavailable",
+                label="Lastništva ni mogoče preveriti brez identifikatorja parcele",
+                note=(
+                    "Identifikator EID parcele ni bil vrnjen, zato javnega lastniškega "
+                    "zapisa ni bilo mogoče poiskati."
+                ),
+                source_url=source_url,
+            )
+        response = self.http.request(
+            "GET",
+            PUBLIC_OWNERS_URL,
+            params={
+                "featureType": "JAVNI_SERVIS_LASTNIKI_PARCELE.JSON",
+                "filter": eid,
+            },
+            timeout=8,
+        )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise UpstreamServiceError(
+                "GURS public ownership service returned an unreadable response."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise UpstreamServiceError(
+                "GURS public ownership service returned an invalid response."
+            )
+
+        rights = payload.get("pravice") or []
+        shares: list[OwnershipShare] = []
+        private_index = 0
+        totals = {
+            "private_person": 0.0,
+            "publicly_named": 0.0,
+            "unknown": 0.0,
+        }
+        for right in rights:
+            if not isinstance(right, dict):
+                continue
+            fraction = self._clean_text(right.get("delez"))
+            percent = self._share_percent(fraction)
+            holders = [
+                holder
+                for holder in (right.get("imetniki") or [])
+                if isinstance(holder, dict)
+            ]
+            public_names = list(
+                dict.fromkeys(
+                    name
+                    for holder in holders
+                    if (name := self._public_owner_name(holder.get("ime_naziv")))
+                )
+            )
+            hidden_count = sum(
+                self._is_hidden_owner(holder.get("ime_naziv")) for holder in holders
+            )
+
+            if public_names and not hidden_count:
+                owner_kind = "publicly_named"
+                owner_label = "; ".join(public_names)
+            elif hidden_count and not public_names:
+                owner_kind = "private_person"
+                private_index += 1
+                owner_label = (
+                    f"Fizična oseba {private_index} (ime ni javno)"
+                    if len(holders) == 1
+                    else (
+                        f"Skupina fizičnih oseb {private_index} "
+                        f"({len(holders)} imetnikov; imena niso javna)"
+                    )
+                )
+            elif public_names or hidden_count:
+                owner_kind = "mixed"
+                owner_label = "; ".join(
+                    [
+                        *public_names,
+                        *(
+                            [f"fizične osebe ({hidden_count}; imena niso javna)"]
+                            if hidden_count
+                            else []
+                        ),
+                    ]
+                )
+            else:
+                owner_kind = "unknown"
+                owner_label = "Lastnik v javnem zapisu ni opredeljen"
+
+            total_kind = owner_kind if owner_kind in totals else "unknown"
+            if percent is not None:
+                totals[total_kind] += percent
+            shares.append(
+                OwnershipShare(
+                    owner_label=owner_label,
+                    owner_kind=owner_kind,
+                    share_fraction=fraction,
+                    share_percent=percent,
+                    status=self._clean_text(right.get("status_lastnika")),
+                    holder_count=max(1, len(holders)),
+                )
+            )
+
+        if not shares:
+            return OwnershipAssessment(
+                status="not_found",
+                label="Javni servis ni vrnil lastniškega zapisa",
+                note=(
+                    "To ne dokazuje, da parcela nima lastnika. Aktualno pravno stanje "
+                    "preverite v zemljiški knjigi."
+                ),
+                source_url=source_url,
+            )
+
+        total = sum(
+            share.share_percent or 0
+            for share in shares
+            if share.share_percent is not None
+        )
+        return OwnershipAssessment(
+            status="available",
+            label=self._ownership_record_label(len(shares)),
+            shares=shares,
+            private_share_percent=round(totals["private_person"], 2),
+            publicly_named_share_percent=round(totals["publicly_named"], 2),
+            unknown_share_percent=round(totals["unknown"], 2),
+            total_share_percent=round(total, 2),
+            note=(
+                "Imena fizičnih oseb v javnem vpogledu niso razkrita. Odstotki so "
+                "izračunani iz objavljenih ulomkov; zemljiška knjiga je merodajna za "
+                "aktualno pravno stanje."
+            ),
+            source_url=source_url,
+        )
+
+    @staticmethod
+    def _unavailable_ownership(eid: str) -> OwnershipAssessment:
+        return OwnershipAssessment(
+            status="unavailable",
+            label="Javnega lastniškega zapisa trenutno ni bilo mogoče prebrati",
+            note=(
+                "Storitev GURS za javne podatke o lastništvu trenutno ni odgovorila. "
+                "Lastništvo preverite v javnem vpogledu oziroma zemljiški knjigi."
+            ),
+            source_url=(
+                f"https://ipi.eprostor.gov.si/jv/?eid={eid}"
+                if eid
+                else "https://ipi.eprostor.gov.si/jv/"
+            ),
+        )
+
+    @staticmethod
+    def _share_percent(value: str | None) -> float | None:
+        if not value:
+            return None
+        try:
+            fraction = Fraction(re.sub(r"\s+", "", value))
+            if fraction.denominator == 0:
+                return None
+            return round(float(fraction * 100), 2)
+        except (ValueError, ZeroDivisionError):
+            return None
+
+    @staticmethod
+    def _clean_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        text = re.sub(r"\s+", " ", str(value)).strip()
+        return text or None
+
+    @classmethod
+    def _is_hidden_owner(cls, value: Any) -> bool:
+        text = (cls._clean_text(value) or "").casefold()
+        return not text or text in {"***", "/"} or "ni javen" in text
+
+    @classmethod
+    def _public_owner_name(cls, value: Any) -> str | None:
+        return None if cls._is_hidden_owner(value) else cls._clean_text(value)
+
+    @staticmethod
+    def _ownership_record_label(count: int) -> str:
+        if count == 1:
+            return "1 javni lastniški zapis"
+        if count == 2:
+            return "2 javna lastniška zapisa"
+        if count in {3, 4}:
+            return f"{count} javni lastniški zapisi"
+        return f"{count} javnih lastniških zapisov"
 
     @staticmethod
     def _bbox(geometry: dict[str, Any]) -> list[float]:

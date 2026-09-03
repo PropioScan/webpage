@@ -194,6 +194,25 @@ main { min-width: 0; flex: 1; overflow: hidden; }
 .boundary-result.is-ordered { background: #e6f3e8; }
 .boundary-result.is-partially_ordered { background: #fff4d9; }
 .boundary-result.is-not_ordered { background: #fbe9e6; }
+.ownership-summary { padding: 16px 18px 18px; border-top: 1px solid var(--line); background: #fbfcfa; }
+.ownership-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ownership-head > div > span { display: block; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; }
+.ownership-head > div > strong { display: block; margin-top: 3px; color: var(--ink); font: 750 12px "Manrope", sans-serif; }
+.ownership-source { flex: none; color: var(--teal); font-size: 8px; font-weight: 800; text-decoration: none; }
+.ownership-totals { margin-top: 11px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.ownership-total { padding: 9px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #dce6e1; border-radius: 7px; background: #f0f7f4; }
+.ownership-total span { color: #64736c; font-size: 8px; }
+.ownership-total strong { color: var(--green-dark); font-size: 10px; }
+.ownership-rows { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.ownership-row { padding: 9px 11px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
+.ownership-row:last-child { border-bottom: 0; }
+.ownership-row > div { min-width: 0; }
+.ownership-row > div strong, .ownership-row > div span { display: block; }
+.ownership-row > div strong { font-size: 9px; overflow-wrap: anywhere; }
+.ownership-row > div span { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.ownership-row > b { color: var(--navy); font-size: 10px; white-space: nowrap; }
+.ownership-row.is-private_person > b { color: #74582b; }
+.ownership-note { margin: 9px 0 0; color: #78827d; font-size: 8px; line-height: 1.5; }
 .valuation-card { padding: 20px; border: 1px solid #dbe2d6; border-radius: 11px; background: #e8eee2; }
 .valuation-card > span { color: #65715f; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
 .valuation-card > strong { margin: 5px 0 12px; display: block; color: var(--green-dark); font: 800 27px "Manrope", sans-serif; letter-spacing: -1.2px; }
@@ -576,6 +595,9 @@ footer { padding: 26px 36px; font-size: 10px; }
   .fact-grid { grid-template-columns: repeat(2, 1fr); }
   .fact:nth-child(3n) { border-right: 1px solid var(--line); }
   .fact:nth-child(2n) { border-right: 0; }
+  .ownership-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .ownership-totals { grid-template-columns: 1fr; }
+  .ownership-row { align-items: flex-start; grid-template-columns: 1fr; gap: 5px; }
   .planning-context, .land-use-items, .infrastructure-grid, .screening-grid, .findings { grid-template-columns: 1fr; }
   .land-use-row { border-right: 0; }
   .parcel-map-caption, .planning-map-caption, .planning-act-card { align-items: flex-start; flex-direction: column; }

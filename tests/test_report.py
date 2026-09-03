@@ -7,6 +7,8 @@ from app.models import (
     AssessmentTone,
     LandUseAssessment,
     LandUseAssessmentItem,
+    OwnershipAssessment,
+    OwnershipShare,
     ParcelBoundaryAssessment,
     ParcelInformation,
     PlanningCondition,
@@ -74,6 +76,52 @@ def test_section_one_reports_ordered_boundary_with_gurs_evidence():
     assert "4 od 4" in fields["Dokaz iz evidence GURS"]
     assert "točnostjo do 1 m" in fields["Natančnost mejnih daljic"]
     assert fields["Metoda določitve površine"] == "Iz koordinat"
+
+
+def test_section_one_lists_anonymized_and_public_ownership_percentages():
+    report_result = result()
+    report_result.parcel.ownership = OwnershipAssessment(
+        status="available",
+        label="2 javna lastniška zapisa",
+        shares=[
+            OwnershipShare(
+                owner_label="Fizična oseba 1 (ime ni javno)",
+                owner_kind="private_person",
+                share_fraction="1/6",
+                share_percent=16.67,
+                status="P - pravi lastnik",
+            ),
+            OwnershipShare(
+                owner_label="MESTNA OBČINA LJUBLJANA",
+                owner_kind="publicly_named",
+                share_fraction="5/6",
+                share_percent=83.33,
+                status="P - pravi lastnik",
+            ),
+        ],
+        private_share_percent=16.67,
+        publicly_named_share_percent=83.33,
+        total_share_percent=100,
+        note="Imena fizičnih oseb niso javna.",
+    )
+
+    section = build_report_sections(report_result)[0]
+    fields = {field.label: field.value for field in section.fields}
+
+    assert fields["Lastništvo – fizične osebe"].startswith("16,67 %")
+    assert fields["Lastništvo – javno imenovani lastniki"] == "83,33 %"
+    assert "1/6 · 16,67 %" in fields["Lastniški delež 1"]
+    assert "MESTNA OBČINA LJUBLJANA" in fields["Lastniški delež 2"]
+
+    pdf = generate_location_report(report_result)
+    document = pymupdf.open(stream=pdf, filetype="pdf")
+    first_page_text = document[0].get_text()
+    complete_text = "\n".join(page.get_text() for page in document)
+    assert "JAVNO DOSTOPNO LASTNIŠTVO" in first_page_text
+    assert "Fizične osebe (imena niso javna): 16,67 %" in first_page_text
+    assert "Javno imenovani lastniki: 83,33 %" in first_page_text
+    assert "Fizična oseba 1 (ime ni javno)" in complete_text
+    assert "MESTNA OBČINA LJUBLJANA" in complete_text
 
 
 def test_section_seven_explains_detected_land_use_codes():

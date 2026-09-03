@@ -54,5 +54,5 @@ def test_new_successful_result_replaces_the_previous_copy(tmp_path: Path) -> Non
     assert cached.stored_at == second_at
 
 
-def test_cache_schema_requires_the_detailed_cadastral_restriction_version() -> None:
-    assert RESULT_SCHEMA_VERSION >= 7
+def test_cache_schema_requires_the_public_ownership_version() -> None:
+    assert RESULT_SCHEMA_VERSION >= 8

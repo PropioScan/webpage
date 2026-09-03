@@ -125,6 +125,9 @@ const formatMoney = (value) => value == null
   ? "Ni podatka"
   : new Intl.NumberFormat("sl-SI", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 const formatNumber = (value) => value == null ? "Ni podatka" : new Intl.NumberFormat("sl-SI").format(value);
+const formatPercent = (value) => value == null
+  ? "odstotek ni na voljo"
+  : `${new Intl.NumberFormat("sl-SI", { maximumFractionDigits: 2 }).format(value)} %`;
 const formatBytes = (value) => {
   if (!value) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -650,8 +653,9 @@ function renderOfficialForm(result, jobId) {
           boundary?.accuracy_descriptions?.join("; ") || "Podrobna natančnost ni bila vrnjena",
         ],
         ["Metoda določitve površine", parcel.area_determination_method || "Podatek ni na voljo"],
+        ...officialOwnershipRows(parcel.ownership),
       ],
-      hint: "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS označene kot urejene. Delno urejena pomeni, da je urejen le del daljic. Poudarjene črte v karti Hitrega pregleda prikazuje uradni sloj GURS Urejene meje; prikaz ne nadomešča geodetske zakoličbe.",
+      hint: "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS označene kot urejene. Delno urejena pomeni, da je urejen le del daljic. Imena fizičnih lastnikov niso javno prikazana; aktualno lastništvo potrjuje zemljiška knjiga. Poudarjene črte v karti Hitrega pregleda prikazuje uradni sloj GURS Urejene meje.",
     },
     {
       number: 2,
@@ -832,6 +836,34 @@ function officialNoFindingText(group) {
     "Pravne in prostorske omejitve": "NE — v preverjenih uradnih slojih ni zaznane pravne ali prostorske omejitve na parceli.",
     "Naravne nevarnosti": "NE — v preverjenih slojih ni zaznanega poplavnega, erozijskega ali plazovnega območja na parceli.",
   }[group] || "NE — v preverjenih uradnih slojih ni zaznanega preseka s parcelo.";
+}
+
+function officialOwnershipRows(ownership) {
+  if (!ownership) {
+    return [["Javno dostopno lastništvo", "Podatek ni bil pridobljen; aktualno stanje preverite v zemljiški knjigi."]];
+  }
+  if (ownership.status !== "available") {
+    return [
+      ["Javno dostopno lastništvo", ownership.label, ownership.source_url],
+      ["Pojasnilo lastništva", ownership.note],
+    ];
+  }
+  const rows = [
+    ["Lastništvo – fizične osebe", `${formatPercent(ownership.private_share_percent)} · imena niso javna`, ownership.source_url],
+    ["Lastništvo – javno imenovani lastniki", formatPercent(ownership.publicly_named_share_percent), ownership.source_url],
+  ];
+  if (ownership.unknown_share_percent) {
+    rows.push(["Lastništvo – nerazvrščeni zapisi", formatPercent(ownership.unknown_share_percent)]);
+  }
+  (ownership.shares || []).forEach((share, index) => {
+    const amount = [share.share_fraction, formatPercent(share.share_percent)].filter(Boolean).join(" · ");
+    rows.push([
+      `Lastniški delež ${index + 1}`,
+      [share.owner_label, amount, share.status].filter(Boolean).join(" · "),
+    ]);
+  });
+  rows.push(["Pojasnilo lastništva", ownership.note]);
+  return rows;
 }
 
 function officialSection(sectionData) {
@@ -1408,7 +1440,7 @@ function renderParcel(parcel) {
     if (note) fact.append(element("small", "", note));
     facts.append(fact);
   });
-  card.append(primary, facts);
+  card.append(primary, facts, buildOwnershipSummary(parcel.ownership));
 
   const valuation = element("aside", "valuation-card");
   valuation.append(element("span", "", "GURS generalized value"), element("strong", "", formatMoney(parcel.official_valuation_eur)));
@@ -1426,6 +1458,58 @@ function renderParcel(parcel) {
     valuation.append(row);
   });
   overview.append(card, valuation);
+}
+
+function buildOwnershipSummary(ownership) {
+  const section = element("section", "ownership-summary");
+  const head = element("div", "ownership-head");
+  const copy = element("div");
+  copy.append(
+    element("span", "", "Javno dostopno lastništvo"),
+    element("strong", "", ownership?.label || "Podatek še ni bil pridobljen"),
+  );
+  head.append(copy);
+  if (ownership?.source_url) {
+    head.append(link(ownership.source_url, "Preveri pri GURS ↗", "ownership-source"));
+  }
+  section.append(head);
+
+  if (ownership?.status === "available") {
+    const totals = element("div", "ownership-totals");
+    totals.append(
+      ownershipTotal("Fizične osebe – imena niso javna", ownership.private_share_percent),
+      ownershipTotal("Javno imenovani lastniki", ownership.publicly_named_share_percent),
+    );
+    if (ownership.unknown_share_percent) {
+      totals.append(ownershipTotal("Nerazvrščeni zapisi", ownership.unknown_share_percent));
+    }
+    section.append(totals);
+
+    const rows = element("div", "ownership-rows");
+    (ownership.shares || []).forEach((share) => {
+      const row = element("div", `ownership-row is-${share.owner_kind}`);
+      const owner = element("div");
+      owner.append(
+        element("strong", "", share.owner_label),
+        element("span", "", share.status || "Vrsta lastniške pravice ni navedena"),
+      );
+      const value = [share.share_fraction, formatPercent(share.share_percent)]
+        .filter(Boolean)
+        .join(" · ");
+      row.append(owner, element("b", "", value));
+      rows.append(row);
+    });
+    section.append(rows);
+  }
+
+  section.append(element("p", "ownership-note", ownership?.note || "Aktualno lastništvo preverite v zemljiški knjigi."));
+  return section;
+}
+
+function ownershipTotal(label, value) {
+  const item = element("div", "ownership-total");
+  item.append(element("span", "", label), element("strong", "", formatPercent(value)));
+  return item;
 }
 
 function renderContext(contexts) {

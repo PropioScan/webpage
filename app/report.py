@@ -197,6 +197,40 @@ class _ReportWriter:
         self._text(divider + 18, rect.y0 + 55, f"Analiza zaključena {completed}", 7.2, color=MUTED)
         self.y = rect.y1 + 14
 
+        ownership = parcel.ownership
+        if ownership and ownership.status == "available":
+            ownership_summary = (
+                f"Fizične osebe (imena niso javna): "
+                f"{_format_percentage(ownership.private_share_percent)}  ·  "
+                f"Javno imenovani lastniki: "
+                f"{_format_percentage(ownership.publicly_named_share_percent)}"
+            )
+        elif ownership:
+            ownership_summary = ownership.label
+        else:
+            ownership_summary = "Podatek ni bil pridobljen; preverite zemljiško knjigo."
+        ownership_lines = self._wrapped(ownership_summary, CONTENT_WIDTH - 28, 8.2)
+        ownership_height = 26 + len(ownership_lines) * 10
+        self._ensure(ownership_height + 12)
+        rect = pymupdf.Rect(
+            LEFT,
+            self.y,
+            A4_WIDTH - RIGHT,
+            self.y + ownership_height,
+        )
+        self.page.draw_rect(rect, color=(0.67, 0.82, 0.78), fill=(0.92, 0.97, 0.95), width=0.8)
+        self._text(
+            rect.x0 + 14,
+            rect.y0 + 17,
+            "JAVNO DOSTOPNO LASTNIŠTVO",
+            7,
+            bold=True,
+            color=TEAL,
+        )
+        for index, line in enumerate(ownership_lines):
+            self._text(rect.x0 + 14, rect.y0 + 32 + index * 10, line, 8.2)
+        self.y = rect.y1 + 12
+
         warning = (
             "Ta dokument je avtomatsko pripravljen informativni pregled javnih evidenc. "
             "Ni lokacijska informacija, upravna odločba ali potrdilo občine. Polja z oznako "
@@ -689,6 +723,71 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
     reference = f"{parcel.cadastral_municipality_id} {parcel.parcel_number}"
     cadastral_name = parcel.cadastral_municipality or "Ime katastrske občine ni bilo vrnjeno"
 
+    ownership_fields: list[ReportField] = []
+    ownership = parcel.ownership
+    if ownership and ownership.status == "available":
+        ownership_fields.extend(
+            (
+                ReportField(
+                    "Lastništvo – fizične osebe",
+                    f"{_format_percentage(ownership.private_share_percent)} "
+                    "(imena v javnem vpogledu niso razkrita)",
+                ),
+                ReportField(
+                    "Lastništvo – javno imenovani lastniki",
+                    _format_percentage(ownership.publicly_named_share_percent),
+                ),
+            )
+        )
+        if ownership.unknown_share_percent:
+            ownership_fields.append(
+                ReportField(
+                    "Lastništvo – nerazvrščeni zapisi",
+                    _format_percentage(ownership.unknown_share_percent),
+                )
+            )
+        for index, share in enumerate(ownership.shares, start=1):
+            amount = " · ".join(
+                part
+                for part in (
+                    share.share_fraction,
+                    _format_percentage(share.share_percent)
+                    if share.share_percent is not None
+                    else None,
+                )
+                if part
+            )
+            ownership_fields.append(
+                ReportField(
+                    f"Lastniški delež {index}",
+                    " · ".join(
+                        part
+                        for part in (share.owner_label, amount, share.status)
+                        if part
+                    ),
+                )
+            )
+        ownership_fields.extend(
+            (
+                ReportField("Vir lastništva", ownership.source),
+                ReportField("Pojasnilo lastništva", ownership.note),
+            )
+        )
+    elif ownership:
+        ownership_fields.extend(
+            (
+                ReportField("Javno dostopno lastništvo", ownership.label),
+                ReportField("Pojasnilo lastništva", ownership.note),
+            )
+        )
+    else:
+        ownership_fields.append(
+            ReportField(
+                "Javno dostopno lastništvo",
+                "Podatek ni bil pridobljen; aktualno stanje preverite v zemljiški knjigi.",
+            )
+        )
+
     land_fields: list[ReportField] = []
     contexts = result.planning_context
     if contexts:
@@ -924,8 +1023,14 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
                     "Metoda določitve površine",
                     parcel.area_determination_method or "Podatek ni na voljo",
                 ),
+                *ownership_fields,
             ),
-            "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS označene kot urejene; delno urejena pomeni, da je urejen le del daljic. Podatek ne nadomešča geodetske zakoličbe.",
+            (
+                "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS "
+                "označene kot urejene; delno urejena pomeni, da je urejen le del "
+                "daljic. Imena fizičnih lastnikov niso javno prikazana. Aktualno "
+                "lastništvo in deleže potrjuje zemljiška knjiga."
+            ),
         ),
         ReportSection(
             2,
@@ -1081,3 +1186,7 @@ def _clip(text: str, limit: int) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 1].rstrip() + "…"
+
+
+def _format_percentage(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",") + " %"

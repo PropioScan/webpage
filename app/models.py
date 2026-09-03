@@ -41,6 +41,28 @@ class ParcelBoundaryAssessment(BaseModel):
     source_url: str = "https://ipi.eprostor.gov.si/jv/"
 
 
+class OwnershipShare(BaseModel):
+    owner_label: str
+    owner_kind: Literal["private_person", "publicly_named", "mixed", "unknown"]
+    share_fraction: str | None = None
+    share_percent: float | None = None
+    status: str | None = None
+    holder_count: int = 1
+
+
+class OwnershipAssessment(BaseModel):
+    status: Literal["available", "not_found", "unavailable"]
+    label: str
+    shares: list[OwnershipShare] = Field(default_factory=list)
+    private_share_percent: float = 0
+    publicly_named_share_percent: float = 0
+    unknown_share_percent: float = 0
+    total_share_percent: float = 0
+    note: str
+    source: str = "GURS – Javni vpogled v podatke o nepremičninah"
+    source_url: str = "https://ipi.eprostor.gov.si/jv/"
+
+
 class ParcelInformation(BaseModel):
     parcel_number: str
     cadastral_municipality_id: int
@@ -57,6 +79,7 @@ class ParcelInformation(BaseModel):
     building_parcel: str | None = None
     restriction_recorded: str | None = None
     boundary_assessment: ParcelBoundaryAssessment | None = None
+    ownership: OwnershipAssessment | None = None
     centroid_e: float | None = None
     centroid_n: float | None = None
     data_timestamp: str | None = None

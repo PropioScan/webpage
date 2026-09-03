@@ -471,7 +471,7 @@
 
     <dialog id="privacy-dialog" class="privacy-dialog privacy-policy-dialog" aria-labelledby="privacy-dialog-title">
       <div class="privacy-dialog-head">
-        <div><span>Različica 1.2 · 31. avgust 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
+        <div><span>Različica 1.3 · 3. september 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
         <button class="dialog-close" type="button" data-privacy-close aria-label="Zapri politiko zasebnosti">×</button>
       </div>
 
@@ -482,7 +482,7 @@
         </section>
         <section>
           <h3>2. Katere podatke obdelujemo</h3>
-          <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani. Zaključeno analizo parcele brez podatkov o obiskovalcu lahko največ 7 dni ponovno uporabimo za hitrejši odgovor; ob rezultatu je to jasno označeno in vedno je na voljo nov pregled aktualnih virov.</p>
+          <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani. Zaključeno analizo parcele brez podatkov o obiskovalcu lahko največ 7 dni ponovno uporabimo za hitrejši odgovor; ob rezultatu je to jasno označeno in vedno je na voljo nov pregled aktualnih virov. Analiza vsebuje tudi javni lastniški zapis GURS: pri fizičnih osebah le anonimizirano oznako in delež, pri javno imenovanih lastnikih pa naziv in delež. Imen, naslovov ali identifikacijskih številk fizičnih oseb ne pridobivamo in ne hranimo.</p>
           <p>Za skrbniški pregled lahko iz IP-ja in uporabniškega agenta izračunamo kratko tehnično oznako skupine <code>T-*</code>. To je le približek: več oseb lahko uporablja isto oznako, ista oseba pa lahko uporablja več oznak. Oznake ne uporabljamo za avtomatizirano odločanje ali oglaševanje.</p>
           <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve. Šele po istem soglasju se lahko naloži Google Analytics 4, ki prejme podatke o ogledu strani, približni državi, napravi, brskalniku, napotitvi in nadzorovanih dogodkih, kot so začetek ali zaključek analize, odprt rezultatni zavihek in prenos poročila. V dogodke za Google ne vključimo parcelne oznake, ID-ja opravila, vsebine dokumentov ali besedila napake.</p>
           <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
@@ -498,7 +498,7 @@
         </section>
         <section>
           <h3>4. Viri, prejemniki in prenosi</h3>
-          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji se ne pošiljajo.</p>
+          <p>Parcelna oznaka se uporablja pri poizvedbah v uradne vire GURS, PIS, GeoHub in eVRD. Varnostni signal pošljemo ponudniku Cloudflare za preverjanje Turnstile; parcelne oznake mu ne pošiljamo. Če je omogočen AI-povzetek, se parcelno omejeni izseki in strukturirani prostorski podatki pošljejo ponudniku OpenAI; celotni PDF-ji in podatki o lastništvu se ne pošiljajo.</p>
           <p>Po soglasju za analitiko je prejemnik podatkov tudi Google Analytics. Google lahko pri omrežni zahtevi prejme IP naslov ter podatke o strani, napotitvi, času, brskalniku in napravi; oglaševalski signali, Google Signals, personalizacija in povezovanje z Google Ads so v naši izvedbi izključeni. Ponudniki lahko podatke obdelujejo zunaj EGP na podlagi veljavnih pogodbenih in drugih ustreznih zaščit.</p>
           <p>Propioscan podatkov ne prodaja in ne uporablja oglaševalskih ali profilirnih piškotkov.</p>
         </section>

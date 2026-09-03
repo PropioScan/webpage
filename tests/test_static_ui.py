@@ -217,6 +217,25 @@ def test_land_use_map_legend_explains_the_filled_target_parcel():
     assert ".target-parcel-fill-swatch" in styles
 
 
+def test_first_page_shows_public_ownership_shares_without_private_names():
+    page = _page()
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert "buildOwnershipSummary(parcel.ownership)" in script
+    assert "...officialOwnershipRows(parcel.ownership)" in script
+    assert "Fizične osebe – imena niso javna" in script
+    assert "Javno imenovani lastniki" in script
+    assert "share.share_fraction" in script
+    assert "share.share_percent" in script
+    assert ".ownership-summary" in styles
+    privacy_text = " ".join(
+        page.get_element_by_id("privacy-dialog").text_content().split()
+    )
+    assert "le anonimizirano oznako in delež" in privacy_text
+    assert "podatki o lastništvu se ne pošiljajo" in privacy_text
+
+
 def test_propioscan_brand_and_legal_footer_are_present():
     page = _page()
 

@@ -13,6 +13,33 @@ def test_parse_parcel_reference_accepts_slash_and_normalizes_spaces():
 
 def test_gurs_combines_cadastre_and_valuation(settings: Settings):
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/std-service/features"):
+            assert request.url.params["featureType"] == (
+                "JAVNI_SERVIS_LASTNIKI_PARCELE.JSON"
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "pravice": [
+                        {
+                            "delez": "1/4",
+                            "status_lastnika": "P - pravi lastnik",
+                            "imetniki": [
+                                {
+                                    "ime_naziv": "Podatek ni javen",
+                                    "naslov": "***",
+                                    "ms_osebe_nep": "***",
+                                }
+                            ],
+                        },
+                        {
+                            "delez": "3/4",
+                            "status_lastnika": "P - pravi lastnik",
+                            "imetniki": [{"ime_naziv": "MESTNA OBČINA LJUBLJANA"}],
+                        },
+                    ]
+                },
+            )
         layer = request.url.params["typeNames"]
         if layer == "SI.GURS.KN:PARCELE":
             features = [
@@ -97,6 +124,24 @@ def test_gurs_combines_cadastre_and_valuation(settings: Settings):
     assert parcel.information.boundary_assessment.label == "Ni urejena"
     assert parcel.information.boundary_assessment.total_segments == 3
     assert parcel.information.boundary_assessment.evidence_complete is True
+    assert parcel.information.ownership is not None
+    assert parcel.information.ownership.label == "2 javna lastniška zapisa"
+    assert parcel.information.ownership.private_share_percent == 25
+    assert parcel.information.ownership.publicly_named_share_percent == 75
+    assert parcel.information.ownership.total_share_percent == 100
+    assert parcel.information.ownership.shares[0].owner_label == (
+        "Fizična oseba 1 (ime ni javno)"
+    )
+    assert parcel.information.ownership.shares[1].owner_label == (
+        "MESTNA OBČINA LJUBLJANA"
+    )
+
+
+def test_ownership_percentage_handles_common_land_registry_fractions():
+    assert GURSClient._share_percent("1/1") == 100
+    assert GURSClient._share_percent("1 / 6") == 16.67
+    assert GURSClient._share_percent("5/6") == 83.33
+    assert GURSClient._share_percent("invalid") is None
 
 
 def test_boundary_status_has_ordered_partial_and_not_ordered_classes():
