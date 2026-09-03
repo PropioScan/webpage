@@ -29,6 +29,7 @@ from .models import (
 
 
 KGI_WFS_URL = "https://ipi.eprostor.gov.si/wfs-si-gurs-kgi/wfs"
+KN_WFS_URL = "https://ipi.eprostor.gov.si/wfs-si-gurs-kn/wfs"
 KGI_WMS_URL = "https://ipi.eprostor.gov.si/wms-si-gurs-kgi/wms"
 DOF_WMS_URL = "https://ipi.eprostor.gov.si/wms-si-gurs-dts/wms"
 KN_WMS_URL = "https://ipi.eprostor.gov.si/wms-si-gurs-kn/wms"
@@ -331,8 +332,9 @@ class SiteAnalysisClient:
         spatial_results: dict[SpatialLayerSpec, list[SpatialFinding] | CheckerError] = {}
         gji_line_result: list[dict[str, Any]] | CheckerError
         municipal_regime_result: list[SpatialFinding] | CheckerError
+        cadastral_restriction_result: list[SpatialFinding] | CheckerError
         all_line_specs = (*INFRASTRUCTURE_SPECS, ROAD_SPEC)
-        with ThreadPoolExecutor(max_workers=14) as executor:
+        with ThreadPoolExecutor(max_workers=15) as executor:
             line_futures = {
                 spec: executor.submit(self._nearest_line_distance, parcel, spec)
                 for spec in all_line_specs
@@ -340,6 +342,9 @@ class SiteAnalysisClient:
             gji_line_future = executor.submit(self._query_detailed_gji_lines, parcel)
             municipal_regime_future = executor.submit(
                 self._query_municipal_regimes, parcel
+            )
+            cadastral_restriction_future = executor.submit(
+                self._query_cadastral_restrictions, parcel
             )
             spatial_futures = {
                 spec: executor.submit(self._query_spatial_layer, parcel, spec)
@@ -363,6 +368,10 @@ class SiteAnalysisClient:
                 municipal_regime_result = municipal_regime_future.result()
             except CheckerError as exc:
                 municipal_regime_result = exc
+            try:
+                cadastral_restriction_result = cadastral_restriction_future.result()
+            except CheckerError as exc:
+                cadastral_restriction_result = exc
 
         for spec in INFRASTRUCTURE_SPECS:
             matching = [
@@ -446,14 +455,30 @@ class SiteAnalysisClient:
         else:
             grouped["constraint"].extend(municipal_regime_result)
 
-        if self._is_affirmative(parcel.information.restriction_recorded):
+        if not isinstance(cadastral_restriction_result, CheckerError):
+            grouped["constraint"].extend(cadastral_restriction_result)
+        elif self._is_affirmative(parcel.information.restriction_recorded):
+            warnings.append(
+                "Kataster potrjuje omejitev, vendar podrobnega sloja OMEJITVE "
+                "trenutno ni bilo mogoče prebrati."
+            )
+
+        if (
+            self._is_affirmative(parcel.information.restriction_recorded)
+            and not any(
+                finding.source == "GURS – Kataster nepremičnin, sloj OMEJITVE"
+                for finding in grouped["constraint"]
+            )
+        ):
             grouped["constraint"].append(
                 SpatialFinding(
                     category="Katastrska omejitev",
-                    name="V katastru nepremičnin je evidentirana omejitev",
+                    name="Omejitev je evidentirana, podrobnost trenutno ni dostopna",
                     detail=(
-                        "Polje OMEJITEV v uradnem zapisu parcele je pritrdilno. "
-                        "Vrsto in pravni učinek preverite v izvornih evidencah."
+                        "Osnovni zapis GURS ima pri polju OMEJITEV vrednost DA, "
+                        "vendar povezani poligon omejitve ni bil vrnjen. Vrsto, "
+                        "obseg in pravni učinek je zato treba potrditi v javnem "
+                        "vpogledu GURS oziroma pri pristojni občini."
                     ),
                     tone=AssessmentTone.caution,
                     source="GURS – kataster nepremičnin",
@@ -474,6 +499,144 @@ class SiteAnalysisClient:
             parcel_map=build_parcel_map(parcel),
             warnings=warnings,
         )
+
+    def _query_cadastral_restrictions(
+        self, parcel: GURSParcel
+    ) -> list[SpatialFinding]:
+        """Return the concrete KN restriction polygons intersecting the parcel."""
+        parcel_shape = shape(parcel.geometry)
+        min_x, min_y, max_x, max_y = parcel.bbox
+        cql = (
+            "BBOX(GEOM,"
+            f"{min_x},{min_y},{max_x},{max_y},'EPSG:3794')"
+        )
+        payload = self.http.get_json(
+            KN_WFS_URL,
+            wfs_params("SI.GURS.KN:OMEJITVE", cql_filter=cql),
+        )
+        findings: list[SpatialFinding] = []
+        for feature in payload.get("features") or []:
+            geometry = feature.get("geometry")
+            properties = feature.get("properties") or {}
+            if not geometry:
+                continue
+            try:
+                restriction_shape = shape(geometry)
+                overlap = parcel_shape.intersection(restriction_shape)
+                if overlap.is_empty or (
+                    restriction_shape.geom_type in {"Polygon", "MultiPolygon"}
+                    and overlap.area <= 0.01
+                ):
+                    continue
+            except (GEOSException, TypeError, ValueError):
+                continue
+
+            restriction_type = self._clean_value(properties.get("VRSTA_ID"))
+            act_reference = self._clean_value(properties.get("ST_AKTA"))
+            official_url = self._clean_value(properties.get("OPIS"))
+            if not official_url or not official_url.startswith(("http://", "https://")):
+                official_url = "https://www.e-prostor.gov.si/"
+            municipality = self._clean_value(properties.get("NASLOV_OBCINE"))
+            municipality_name = municipality.split(",", 1)[0] if municipality else None
+            is_boundary_consent = restriction_type == "1"
+            is_kranj_consent = is_boundary_consent and (
+                "Mestna občina Kranj" in (municipality or "")
+                or "196/2021" in (act_reference or "")
+            )
+
+            if is_boundary_consent:
+                category = "Območje obveznega soglasja za spreminjanje meje parcele"
+                if is_kranj_consent:
+                    name = (
+                        "Obvezno soglasje Mestne občine Kranj za spreminjanje "
+                        "meje parcele"
+                    )
+                    detail = (
+                        "Uradni poligon GURS parcelo uvršča v območje, kjer je pred "
+                        "parcelacijo, izravnavo ali drugim spreminjanjem meje praviloma "
+                        "treba pridobiti soglasje Mestne občine Kranj. Odlok določa "
+                        "pogoje in izjeme; izdano soglasje samo po sebi še ne potrjuje "
+                        "dopustnosti gradnje."
+                    )
+                    legal_basis = (
+                        "Odlok o območjih obveznega soglasja za spreminjanje meje "
+                        "parcele na območju Mestne občine Kranj"
+                    )
+                else:
+                    name = (
+                        f"Obvezno soglasje za spreminjanje meje parcele – {municipality_name}"
+                        if municipality_name
+                        else "Obvezno soglasje občine za spreminjanje meje parcele"
+                    )
+                    detail = (
+                        "Uradni poligon GURS seka parcelo in jo uvršča v območje "
+                        "obveznega soglasja. Pred spreminjanjem meje preverite pogoje, "
+                        "izjeme in postopek pri pristojni občini."
+                    )
+                    legal_basis = (
+                        "Občinski odlok o območjih obveznega soglasja za spreminjanje "
+                        "meje parcele"
+                    )
+            else:
+                category = "Katastrska omejitev oziroma območje soglasja"
+                name = (
+                    self._clean_value(properties.get("OPOMBA"))
+                    or "Evidentiran poligon omejitve v katastru nepremičnin"
+                )
+                detail = (
+                    "Podrobni sloj GURS OMEJITVE je vrnil uradni poligon, ki seka "
+                    "parcelo. Pomen in pogoje posega preverite v navedenem aktu ter "
+                    "pri pristojnem organu."
+                )
+                legal_basis = "Akt, naveden v uradnem sloju GURS OMEJITVE"
+
+            if act_reference:
+                legal_basis = f"{legal_basis}; {act_reference}"
+            eid = self._clean_value(properties.get("EID_OMEJITEV"))
+            valid_from = self._format_record_date(properties.get("VELJAVNOST_OD"))
+            adopted_on = self._format_record_date(properties.get("DATUM_SPREJEMA"))
+            published_on = self._format_record_date(properties.get("DATUM_OBJAVE"))
+            reference_parts = [f"EID omejitve {eid}" if eid else None]
+            if valid_from:
+                reference_parts.append(f"zapis v sloju velja od {valid_from}")
+            if adopted_on:
+                reference_parts.append(f"akt sprejet {adopted_on}")
+            if published_on:
+                reference_parts.append(f"akt objavljen {published_on}")
+            if municipality:
+                reference_parts.append(f"pristojni organ: {municipality}")
+
+            covered = restriction_shape.buffer(0.01).covers(parcel_shape)
+            geometry_relation = (
+                "Celotna parcela leži znotraj uradnega poligona omejitve oziroma soglasja."
+                if covered
+                else "Uradni poligon omejitve oziroma soglasja delno seka parcelo."
+            )
+            findings.append(
+                SpatialFinding(
+                    category=category,
+                    name=name,
+                    detail=detail,
+                    legal_basis=legal_basis,
+                    geometry_relation=geometry_relation,
+                    tone=AssessmentTone.concern,
+                    reference=" · ".join(part for part in reference_parts if part) or None,
+                    source="GURS – Kataster nepremičnin, sloj OMEJITVE",
+                    source_url=official_url,
+                )
+            )
+        return findings
+
+    @staticmethod
+    def _format_record_date(value: Any) -> str | None:
+        text = SiteAnalysisClient._clean_value(value)
+        if not text:
+            return None
+        match = re.match(r"(\d{4})-(\d{2})-(\d{2})", text)
+        if not match:
+            return text
+        year, month, day = match.groups()
+        return f"{int(day)}. {int(month)}. {year}"
 
     def _direct_infrastructure(self, parcel: GURSParcel) -> list[dict[str, Any]]:
         reference = parcel.information
@@ -1432,7 +1595,16 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
         "TRANSPARENT": "TRUE",
     }
     legal_regime_url = f"{KGI_WMS_URL}?{urlencode(legal_regime_params)}"
-    additional_regime_urls: list[str] = []
+    restriction_params = {
+        **common,
+        "LAYERS": "SI.GURS.KN:OMEJITVE",
+        "STYLES": "kn_nep_zk_obmocje_soglasij",
+        "FORMAT": "image/png",
+        "TRANSPARENT": "TRUE",
+    }
+    additional_regime_urls: list[str] = [
+        f"{KN_WMS_URL}?{urlencode(restriction_params)}"
+    ]
     if SiteAnalysisClient._supports_municipal_regimes(parcel):
         airport_params = {
             "SERVICE": "WMS",
@@ -1467,8 +1639,9 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
             "Poudarjene mejne daljice prikazuje uradni sloj GURS Urejene meje. "
             "Evidentirani komunalni vodi (GJI) so posplošeni in informativni; lega na "
             "karti ne pomeni priključka ali soglasja upravljavca. Geometrijska priloga "
-            "pravnih režimov prikazuje evidentirane osi in objekte, ne pa nujno uradnega "
-            "obrisa njihovega varovalnega pasu."
+            "pravnih režimov prikazuje tudi uradni sloj katastrskih omejitev oziroma "
+            "območij soglasij. Pri GJI prikazana os ni nujno uradni zunanji rob "
+            "varovalnega pasu."
         ),
     )
 

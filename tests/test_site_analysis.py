@@ -100,6 +100,10 @@ def test_parcel_map_uses_official_orthophoto_and_filtered_overlay():
     assert result.legal_regime_overlay_url is not None
     assert "LINIJE_CESTE_G" in result.legal_regime_overlay_url
     assert "POLIGONI_LETALISCA_G" in result.legal_regime_overlay_url
+    assert any(
+        "SI.GURS.KN%3AOMEJITVE" in url
+        for url in result.legal_regime_additional_overlay_urls
+    )
     assert result.official_viewer_url.endswith("?eid=123456")
 
 
@@ -254,8 +258,62 @@ def test_radovljica_airport_zone_uses_the_municipal_vector_layer(settings: Setti
     assert "64. člen" in finding.legal_basis
     assert "območju B" in finding.geometry_relation
     map_result = build_parcel_map(test_parcel)
-    assert len(map_result.legal_regime_additional_overlay_urls) == 1
-    assert "Vplivno_obmocje_letalisca" in map_result.legal_regime_additional_overlay_urls[0]
+    assert len(map_result.legal_regime_additional_overlay_urls) == 2
+    assert any(
+        "Vplivno_obmocje_letalisca" in url
+        for url in map_result.legal_regime_additional_overlay_urls
+    )
+
+
+def test_cadastral_restriction_returns_concrete_boundary_consent_details(
+    settings: Settings,
+):
+    feature = {
+        "properties": {
+            "EID_OMEJITEV": "120300000010111683",
+            "OPIS": "https://www.uradni-list.si/1/objava.jsp?sop=2021-01-3925",
+            "VRSTA_ID": 1,
+            "VELJAVNOST_OD": "2026-01-05T00:00:00Z",
+            "DATUM_SPREJEMA": "2021-11-24",
+            "DATUM_OBJAVE": "2021-12-17",
+            "ST_AKTA": "Uradni list RS, št. 196/2021 in 16/2025",
+            "NASLOV_OBCINE": "Mestna občina Kranj, Slovenski trg 1, 4000 Kranj",
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [[-2, -2], [12, -2], [12, 12], [-2, 12], [-2, -2]]
+            ],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["typeNames"] == "SI.GURS.KN:OMEJITVE"
+        assert "BBOX(GEOM" in request.url.params["CQL_FILTER"]
+        return httpx.Response(200, json={"features": [feature]})
+
+    client = SiteAnalysisClient(
+        settings, http_client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    try:
+        findings = client._query_cadastral_restrictions(parcel())
+    finally:
+        client.close()
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.category == "Območje obveznega soglasja za spreminjanje meje parcele"
+    assert finding.name == (
+        "Obvezno soglasje Mestne občine Kranj za spreminjanje meje parcele"
+    )
+    assert "parcelacijo" in finding.detail
+    assert "196/2021 in 16/2025" in finding.legal_basis
+    assert "Celotna parcela" in finding.geometry_relation
+    assert "5. 1. 2026" in finding.reference
+    assert "akt sprejet 24. 11. 2021" in finding.reference
+    assert "akt objavljen 17. 12. 2021" in finding.reference
+    assert finding.source == "GURS – Kataster nepremičnin, sloj OMEJITVE"
+    assert finding.source_url.endswith("sop=2021-01-3925")
 
 
 def _direct_gji(eid: str, code: int, theme: str, kind: str) -> dict:

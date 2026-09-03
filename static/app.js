@@ -510,10 +510,10 @@ function renderResult(result, job) {
   renderPlanningActs(result.planning_acts || []);
   renderInfrastructure(result.infrastructure || []);
   renderRoadAccess(result.road_access);
-  renderRiskScore("#protected-areas", "Varovana območja", result.protected_areas || [], "Preverjeni sloji niso vrnili varovanega območja na parceli.");
-  renderRiskScore("#cultural-heritage", "Kulturna dediščina", result.cultural_heritage || [], "Register eVRD ni vrnil režima kulturne dediščine na parceli.");
-  renderRiskScore("#constraints", "Omejitve", result.constraints || [], "Preverjeni vodovarstveni in katastrski sloji niso vrnili omejitve.");
-  renderRiskScore("#risks", "Tveganja", result.risks || [], "Preverjeni sloji poplav, erozije in plazov niso vrnili preseka.");
+  renderRiskScore("#protected-areas", "Varovana območja", result.protected_areas || [], officialNoFindingText("Varstvo narave"));
+  renderRiskScore("#cultural-heritage", "Kulturna dediščina", result.cultural_heritage || [], officialNoFindingText("Kulturna dediščina"));
+  renderRiskScore("#constraints", "Omejitve", result.constraints || [], officialNoFindingText("Pravne in prostorske omejitve"));
+  renderRiskScore("#risks", "Tveganja", result.risks || [], officialNoFindingText("Naravne nevarnosti"));
   renderDocuments(result.documents || [], result.warnings || []);
   renderOfficialForm(result, jobId);
   activateResultTab("overview");
@@ -545,6 +545,11 @@ function renderOfficialForm(result, jobId) {
   const planningDrawing = (planningMap?.evidence || []).find((item) => item.preview_url)
     || planningMap?.evidence?.[0]
     || null;
+  const boundaryConsentFindings = (result.constraints || []).filter((finding) => (
+    (finding.category || "").toLocaleLowerCase("sl").includes("soglasja za spreminjanje meje")
+    || (finding.name || "").toLocaleLowerCase("sl").includes("soglasje")
+      && (finding.name || "").toLocaleLowerCase("sl").includes("spreminjanje meje")
+  ));
 
   document.querySelector("#report-parcel-reference").textContent = `${parcel.cadastral_municipality_id} ${parcel.parcel_number}`;
   document.querySelector("#report-cadastral-municipality").textContent = `${parcel.cadastral_municipality_id} – ${parcel.cadastral_municipality || "ime ni na voljo"}`;
@@ -577,6 +582,18 @@ function renderOfficialForm(result, jobId) {
     ...officialFindingRows("Pravne in prostorske omejitve", result.constraints || []),
     ...officialFindingRows("Naravne nevarnosti", result.risks || []),
   ];
+  const boundaryConsentRows = boundaryConsentFindings.length
+    ? boundaryConsentFindings.flatMap((finding) => [
+      ["Stanje", "DA — parcela leži v evidentiranem območju obveznega soglasja", finding.source_url],
+      ["Ime režima", finding.name],
+      ["Opis ugotovitve", finding.detail || "Uradni sloj je vrnil presek s parcelo."],
+      ["Pravna podlaga", finding.legal_basis || "Pravno podlago preverite v navedenem občinskem aktu."],
+      ["Evidenca", [finding.source, finding.reference].filter(Boolean).join(" · "), finding.source_url],
+      ["Geometrija", finding.geometry_relation || "Uradni poligon seka parcelo."],
+    ])
+    : String(parcel.restriction_recorded || "").trim().toLocaleLowerCase("sl") === "da"
+      ? [["Stanje", "NI MOGOČE DOLOČITI — GURS evidentira omejitev, vendar njene vrste trenutno ni bilo mogoče prebrati. Preverite jo v javnem vpogledu GURS oziroma pri občini."]]
+      : [["Stanje", "NE — v preverjenem sloju GURS OMEJITVE ni zaznanega območja obveznega soglasja. Rezultat pred spreminjanjem meje vseeno potrdite pri občini."]];
   const codeMeanings = (assessment?.items || [])
     .filter((item) => item.code)
     .map((item) => `${item.code} – ${item.name || "opis namenske rabe ni na voljo"}`)
@@ -697,8 +714,8 @@ function renderOfficialForm(result, jobId) {
     {
       number: 8,
       title: "Soglasje za spreminjanje meje parcele",
-      status: "review",
-      rows: [["Stanje", "Obveznost pridobitve soglasja ni bila samodejno potrjena oziroma izključena"]],
+      status: boundaryConsentFindings.length ? "partial" : "review",
+      rows: boundaryConsentRows,
       hint: "Pred parcelacijo ali izravnavo meje preverite obveznost soglasja in njeno pravno podlago pri občini.",
     },
     {
@@ -793,18 +810,28 @@ async function downloadLocationReport(event) {
 }
 
 function officialFindingRows(group, findings) {
-  if (!findings.length) return [[group, "Preverjeni spletni sloji niso vrnili preseka"]];
+  if (!findings.length) return [[group, officialNoFindingText(group)]];
   return findings.flatMap((finding, index) => {
     const suffix = ` (${group} ${index + 1})`;
-    const source = [finding.source, finding.reference, finding.detail].filter(Boolean).join(" · ");
+    const source = [finding.source, finding.reference].filter(Boolean).join(" · ");
     return [
       [`Vrsta režima${suffix}`, finding.category],
       [`Ime režima${suffix}`, finding.name],
       [`Pravna podlaga${suffix}`, finding.legal_basis || "V preverjenem sloju ni bila strukturirano navedena"],
-      [`Vir${suffix}`, source],
+      [`Opis ugotovitve${suffix}`, finding.detail || "Uradni sloj je vrnil geometrijski presek s parcelo."],
+      [`Vir${suffix}`, source, finding.source_url],
       [`Geometrija${suffix}`, finding.geometry_relation || "Uradni spletni sloj geometrijsko seka območje parcele."],
     ];
   });
+}
+
+function officialNoFindingText(group) {
+  return {
+    "Varstvo narave": "NE — v preverjenih uradnih slojih ni zaznanega varovanega območja na parceli.",
+    "Kulturna dediščina": "NE — v registru kulturne dediščine ni zaznanega preseka s parcelo.",
+    "Pravne in prostorske omejitve": "NE — v preverjenih uradnih slojih ni zaznane pravne ali prostorske omejitve na parceli.",
+    "Naravne nevarnosti": "NE — v preverjenih slojih ni zaznanega poplavnega, erozijskega ali plazovnega območja na parceli.",
+  }[group] || "NE — v preverjenih uradnih slojih ni zaznanega preseka s parcelo.";
 }
 
 function officialSection(sectionData) {
@@ -880,7 +907,7 @@ function buildRegimeMapAttachment({ parcelMap, findings }) {
   (parcelMap.legal_regime_additional_overlay_urls || []).forEach((url) => {
     const additional = element("img", "parcel-map-overlay municipal-regime-overlay");
     additional.src = url;
-    additional.alt = "Dodatna občinska geometrija pravnega režima";
+    additional.alt = "Dodatna geometrija pravnega režima ali območja soglasja";
     additional.loading = "lazy";
     frame.append(additional);
   });
@@ -896,8 +923,8 @@ function buildRegimeMapAttachment({ parcelMap, findings }) {
   const copy = element("div", "official-map-caption-copy");
   copy.append(
     element("span", "", "Geometrijska priloga · pravni režimi"),
-    element("strong", "", "GURS – Zbirni kataster GJI"),
-    element("p", "", "Prikazane so evidentirane osi in objekti. Linija ni nujno uradni zunanji rob varovalnega pasu; razmerje in zakonska širina sta zapisana pri posameznem režimu."),
+    element("strong", "", "GURS – omejitve parcelacij in zbirni kataster GJI"),
+    element("p", "", "Barvni poligon prikazuje evidentirano območje omejitve oziroma soglasja. Prikazane osi GJI niso nujno zunanji robovi varovalnih pasov; razmerje in pravna podlaga sta zapisana pri posameznem režimu."),
   );
   caption.append(copy, link(parcelMap.official_viewer_url, "Odpri uradni pregledovalnik ↗", "official-map-source"));
   attachment.append(preview, caption, buildRegimeLegend(findings));
@@ -1169,6 +1196,12 @@ function buildParcelLegend(map, onInfrastructureToggle) {
 function buildAreaLegend(assessment, legendUrl) {
   const legend = element("section", "visual-legend area-legend");
   legend.append(element("strong", "visual-legend-title", "Legenda delov parcele"));
+  const target = element("div", "target-parcel-legend");
+  target.append(
+    element("i", "target-parcel-fill-swatch"),
+    element("span", "", "Prosojno rumeno polnilo z rdečo obrobo označuje iskano parcelo"),
+  );
+  legend.append(target);
   const grid = element("div", "area-legend-grid");
   const items = assessment?.items || [];
   if (!items.length) {
@@ -1327,7 +1360,7 @@ function gradeFindings(findings) {
   if (concerns === 1) return { value: 2, label: "Pomembna omejitev" };
   if (cautions >= 2) return { value: 3, label: "Opozorila – preveriti" };
   if (cautions === 1) return { value: 4, label: "Brez pomembne omejitve" };
-  return { value: 5, label: findings.length ? "Brez omejitev" : "Brez zadetka – brez omejitev" };
+  return { value: 5, label: findings.length ? "Brez omejitev" : "NE – ni zaznanega preseka" };
 }
 
 function buildSpatialFinding(finding) {

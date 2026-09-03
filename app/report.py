@@ -746,7 +746,68 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         if findings:
             regime_fields.extend(_finding_fields(group, findings))
         else:
-            regime_fields.append(ReportField(group, "Preverjeni spletni sloji niso vrnili preseka"))
+            regime_fields.append(ReportField(group, _no_finding_text(group)))
+
+    boundary_consent_findings = [
+        finding
+        for finding in result.constraints
+        if "soglasja za spreminjanje meje" in finding.category.casefold()
+        or (
+            "soglasje" in finding.name.casefold()
+            and "spreminjanje meje" in finding.name.casefold()
+        )
+    ]
+    boundary_consent_fields: list[ReportField] = []
+    for finding in boundary_consent_findings:
+        boundary_consent_fields.extend(
+            (
+                ReportField(
+                    "Stanje",
+                    "DA — parcela leži v evidentiranem območju obveznega soglasja",
+                ),
+                ReportField("Ime režima", finding.name),
+                ReportField(
+                    "Opis ugotovitve",
+                    finding.detail
+                    or "Uradni sloj je vrnil geometrijski presek s parcelo.",
+                ),
+                ReportField(
+                    "Pravna podlaga",
+                    finding.legal_basis
+                    or "Pravno podlago preverite v navedenem občinskem aktu.",
+                ),
+                ReportField(
+                    "Evidenca",
+                    " · ".join(
+                        part for part in (finding.source, finding.reference) if part
+                    ),
+                ),
+                ReportField(
+                    "Geometrija",
+                    finding.geometry_relation or "Uradni poligon seka parcelo.",
+                ),
+            )
+        )
+    if not boundary_consent_fields:
+        restriction_recorded = (parcel.restriction_recorded or "").strip().casefold()
+        if restriction_recorded == "da":
+            consent_status = (
+                "NI MOGOČE DOLOČITI — GURS evidentira omejitev, vendar njene "
+                "vrste trenutno ni bilo mogoče prebrati. Preverite jo v javnem "
+                "vpogledu GURS oziroma pri občini."
+            )
+        else:
+            consent_status = (
+                "NE — v preverjenem sloju GURS OMEJITVE ni zaznanega območja "
+                "obveznega soglasja. Rezultat pred spreminjanjem meje vseeno "
+                "potrdite pri občini."
+            )
+        boundary_consent_fields.append(
+            ReportField(
+                "Stanje",
+                consent_status,
+            )
+        )
 
     preemption = result.preemption_right
     if preemption and preemption.status in {"applies", "provision_found"}:
@@ -917,8 +978,8 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         ReportSection(
             8,
             "SOGLASJE ZA SPREMINJANJE MEJE PARCELE",
-            "review",
-            (ReportField("Stanje", "Obveznost pridobitve soglasja ni bila samodejno potrjena oziroma izključena"),),
+            "partial" if boundary_consent_findings else "review",
+            tuple(boundary_consent_fields),
             "Pred parcelacijo ali izravnavo meje preverite pri občini, ali je za območje potrebno soglasje in na kateri pravni podlagi.",
         ),
         ReportSection(
@@ -962,13 +1023,17 @@ def _finding_fields(group: str, findings: list[SpatialFinding]) -> list[ReportFi
                     finding.legal_basis or "V preverjenem sloju ni bila strukturirano navedena",
                 ),
                 ReportField(
+                    f"Opis ugotovitve{suffix}",
+                    finding.detail
+                    or "Uradni sloj je vrnil geometrijski presek s parcelo.",
+                ),
+                ReportField(
                     f"Vir{suffix}",
                     " · ".join(
                         part
                         for part in (
                             finding.source,
                             finding.reference,
-                            finding.detail,
                         )
                         if part
                     ),
@@ -981,6 +1046,26 @@ def _finding_fields(group: str, findings: list[SpatialFinding]) -> list[ReportFi
             )
         )
     return result
+
+
+def _no_finding_text(group: str) -> str:
+    return {
+        "Varstvo narave": (
+            "NE — v preverjenih uradnih slojih ni zaznanega varovanega območja "
+            "na parceli."
+        ),
+        "Kulturna dediščina": (
+            "NE — v registru kulturne dediščine ni zaznanega preseka s parcelo."
+        ),
+        "Pravne in prostorske omejitve": (
+            "NE — v preverjenih uradnih slojih ni zaznane pravne ali prostorske "
+            "omejitve na parceli."
+        ),
+        "Naravne nevarnosti": (
+            "NE — v preverjenih slojih ni zaznanega poplavnega, erozijskega ali "
+            "plazovnega območja na parceli."
+        ),
+    }.get(group, "NE — v preverjenih uradnih slojih ni zaznanega preseka s parcelo.")
 
 
 def _font_path(filename: str) -> Path | None:

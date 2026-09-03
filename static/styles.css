@@ -668,6 +668,8 @@ footer { padding: 26px 36px; font-size: 10px; }
 .parcel-legend-toggle input { accent-color: #2f6f3f; width: 13px; height: 13px; margin: 0; cursor: pointer; flex: none; }
 .parcel-legend-item.is-off { opacity: .4; }
 .area-legend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.target-parcel-legend { margin-bottom: 8px; padding: 8px 10px; display: flex; align-items: center; gap: 9px; border: 1px solid #ead9b0; border-radius: 8px; color: #665127; background: #fff9eb; font-size: 9px; font-weight: 750; }
+.target-parcel-fill-swatch { width: 28px; height: 16px; flex: 0 0 28px; border: 3px solid #b33a2b; border-radius: 3px; background: rgba(228,182,74,.48); }
 .area-legend-item {
   min-width: 0;
   padding: 9px 10px;

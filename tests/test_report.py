@@ -162,6 +162,50 @@ def test_section_six_uses_requested_legal_regime_columns():
     assert "112. člen Energetskega zakona (EZ-2)" in values
 
 
+def test_section_six_uses_clear_no_descriptions_instead_of_technical_empty_text():
+    section = build_report_sections(result())[5]
+    values = [field.value for field in section.fields]
+
+    assert len(values) == 4
+    assert all(value.startswith("NE —") for value in values)
+    assert all("Preverjeni spletni sloji niso vrnili preseka" not in value for value in values)
+
+
+def test_section_eight_explains_detected_boundary_consent():
+    report_result = result()
+    report_result.constraints = [
+        SpatialFinding(
+            category="Območje obveznega soglasja za spreminjanje meje parcele",
+            name="Obvezno soglasje Mestne občine Kranj za spreminjanje meje parcele",
+            detail="Pred parcelacijo je praviloma treba pridobiti soglasje občine.",
+            legal_basis="Odlok; Uradni list RS, št. 196/2021 in 16/2025",
+            geometry_relation="Celotna parcela leži znotraj uradnega poligona.",
+            reference="EID omejitve 123",
+            source="GURS – Kataster nepremičnin, sloj OMEJITVE",
+            source_url="https://www.uradni-list.si/",
+        )
+    ]
+
+    section = build_report_sections(report_result)[7]
+    fields = {field.label: field.value for field in section.fields}
+
+    assert section.status == "partial"
+    assert fields["Stanje"].startswith("DA —")
+    assert "Mestne občine Kranj" in fields["Ime režima"]
+    assert "parcelacijo" in fields["Opis ugotovitve"]
+    assert "196/2021 in 16/2025" in fields["Pravna podlaga"]
+
+
+def test_section_eight_does_not_claim_no_consent_when_gurs_flags_a_restriction():
+    report_result = result()
+    report_result.parcel.restriction_recorded = "Da"
+
+    section = build_report_sections(report_result)[7]
+
+    assert section.fields[0].value.startswith("NI MOGOČE DOLOČITI")
+    assert "GURS evidentira omejitev" in section.fields[0].value
+
+
 def test_section_five_contains_the_detected_municipal_preemption_provision():
     report_result = result()
     report_result.preemption_right = PreemptionRightAssessment(

@@ -21,6 +21,16 @@ from .models import PlanningLandUseMap, PlanningMapEvidence
 PIS_WMS_URL = "https://ipi.eprostor.gov.si/wms-si-mnvp-pa/wms"
 KN_WMS_URL = "https://ipi.eprostor.gov.si/wms-si-gurs-kn/wms"
 NRP_LAYER = "SI.MNVP.PA:NRP_OPN"
+PARCEL_HIGHLIGHT_SLD = (
+    '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">'
+    "<NamedLayer><Name>SI.GURS.KN:PARCELE</Name><UserStyle><FeatureTypeStyle>"
+    "<Rule><PolygonSymbolizer><Fill><CssParameter name=\"fill\">#E4B64A</CssParameter>"
+    "<CssParameter name=\"fill-opacity\">0.38</CssParameter></Fill><Stroke>"
+    "<CssParameter name=\"stroke\">#B33A2B</CssParameter>"
+    "<CssParameter name=\"stroke-width\">4</CssParameter></Stroke>"
+    "</PolygonSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer>"
+    "</StyledLayerDescriptor>"
+)
 
 
 @dataclass(frozen=True)
@@ -217,6 +227,7 @@ def build_planning_land_use_map(
     land_use_url = f"{PIS_WMS_URL}?{urlencode({
         **common,
         'LAYERS': NRP_LAYER,
+        'STYLES': 'eplan_nam_raba_skupna_opacity',
         'FORMAT': 'image/png',
         'TRANSPARENT': 'FALSE',
     })}"
@@ -231,6 +242,7 @@ def build_planning_land_use_map(
             f"KO_ID={reference.cadastral_municipality_id} "
             f"AND ST_PARCELE='{number}'"
         ),
+        'SLD_BODY': PARCEL_HIGHLIGHT_SLD,
     })}"
     legend_url = f"{PIS_WMS_URL}?{urlencode({
         'SERVICE': 'WMS',
@@ -246,9 +258,10 @@ def build_planning_land_use_map(
         legend_url=legend_url,
         source_url=(f"{PIS_WMS_URL}?SERVICE=WMS&REQUEST=GetCapabilities"),
         note=(
-            "Barvni prikaz je iz uradnega sloja PIS NRP_OPN. Rdeči katastrski obris "
-            "označuje iskano parcelo. Deleži so izračunani iz geometrijskega preseka, "
-            "ne iz ugibanja barve slike."
+            "Barvno ozadje je iz uradnega sloja PIS NRP_OPN. Iskana parcela je "
+            "dodatno označena s prosojnim rumenim polnilom in rdečim obrisom, zato "
+            "je območje vidno tudi tam, kjer ima vsa okolica enako namensko rabo. "
+            "Deleži so izračunani iz geometrijskega preseka, ne iz barve slike."
         ),
         evidence=evidence,
     )
@@ -409,6 +422,14 @@ def _map_bbox(bbox: list[float], target_ratio: float) -> list[float]:
         width = height * target_ratio
     else:
         height = width / target_ratio
+    # NRP_OPN is only visible from scale 1:500 upward. A 1200 px image needs
+    # roughly 168 m of ground width at that threshold; keep a safe margin so
+    # small parcels do not receive a blank WMS image with only the KN outline.
+    minimum_width = 190.0
+    if width < minimum_width:
+        factor = minimum_width / width
+        width *= factor
+        height *= factor
     return [
         center_x - width / 2,
         center_y - height / 2,

@@ -198,6 +198,25 @@ def test_section_seven_explains_land_use_codes():
     assert '["Zaznane oznake namenske rabe", codeMeanings]' in script
 
 
+def test_legal_regimes_use_clear_no_labels_and_detailed_consent_rows():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "Preverjeni spletni sloji niso vrnili preseka" not in script
+    assert "NE — v preverjenih uradnih slojih" in script
+    assert '["Opis ugotovitve", finding.detail' in script
+    assert "boundaryConsentFindings" in script
+    assert "DA — parcela leži v evidentiranem območju obveznega soglasja" in script
+    assert "NI MOGOČE DOLOČITI — GURS evidentira omejitev" in script
+
+
+def test_land_use_map_legend_explains_the_filled_target_parcel():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert "Prosojno rumeno polnilo z rdečo obrobo označuje iskano parcelo" in script
+    assert ".target-parcel-fill-swatch" in styles
+
+
 def test_propioscan_brand_and_legal_footer_are_present():
     page = _page()
 

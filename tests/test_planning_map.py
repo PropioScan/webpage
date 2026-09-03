@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from pypdf import PdfWriter
 from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NameObject
@@ -115,8 +116,17 @@ def test_geopdf_match_renders_a_preview_with_parcel_outline(tmp_path: Path):
 
 def test_planning_map_contains_pis_layer_and_filtered_parcel_overlay():
     result = build_planning_land_use_map(_parcel(), [])
+    land_use_query = parse_qs(urlsplit(result.land_use_url).query)
+    overlay_query = parse_qs(urlsplit(result.parcel_overlay_url).query)
+    map_bbox = [float(value) for value in land_use_query["BBOX"][0].split(",")]
 
     assert "NRP_OPN" in result.land_use_url
+    assert land_use_query["STYLES"] == ["eplan_nam_raba_skupna_opacity"]
+    assert map_bbox[2] - map_bbox[0] >= 190
     assert "PARCELE" in result.parcel_overlay_url
     assert "123%2F4" in result.parcel_overlay_url
+    assert "SLD_BODY" in overlay_query
+    assert "fill-opacity" in overlay_query["SLD_BODY"][0]
+    assert "#E4B64A" in overlay_query["SLD_BODY"][0]
+    assert "prosojnim rumenim polnilom" in result.note
     assert "GetLegendGraphic" in result.legend_url
