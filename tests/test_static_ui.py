@@ -188,7 +188,9 @@ def test_cached_analysis_is_disclosed_and_can_be_checked_again():
     assert "job.cache_stored_at || result.completed_at" in script
     assert "Podatki niso bili ponovno pridobljeni iz uradnih virov v živo" in script
     assert "requestParcelSearch(activeParcelReference, true)" in script
-    assert 'pendingForceRefresh ? "Preveri znova" : "Analiziraj"' in script
+    assert "await beginParcelSearch(parcelReference, null, true)" in script
+    assert "response.status === 428 && forceRefresh && !captchaToken" in script
+    assert "beginParcelSearch(parcelReference, token, true)" in script
 
 
 def test_section_seven_explains_land_use_codes():
@@ -337,6 +339,8 @@ def test_cookie_controls_are_consent_first_and_reopenable():
     assert "window.localStorage.removeItem(RECENT_SEARCHES_KEY)" in script
     assert 'fetch("/api/privacy/events"' in script
     assert 'const CONSENT_VERSION = "1.2"' in script
+    assert "propioscan_human_check" in page.text_content()
+    assert "Največ 1 ura" in page.text_content()
     assert "analytics_consent: Boolean(privacyConsent?.analytics)" in script
     assert "if (!privacyConsent?.analytics) return false;" in script
     assert "https://www.googletagmanager.com/gtag/js?id=" in script

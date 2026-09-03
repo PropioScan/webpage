@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import secrets
+import time
 import uuid
 
 import httpx
@@ -12,6 +16,8 @@ TURNSTILE_SITEVERIFY_URL = (
     "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 )
 TURNSTILE_ACTION = "parcel_search"
+HUMAN_CHECK_COOKIE = "propioscan_human_check"
+HUMAN_CHECK_MAX_AGE_SECONDS = 60 * 60
 TURNSTILE_TEST_SITE_KEYS = {
     "1x00000000000000000000AA",
     "2x00000000000000000000AB",
@@ -55,6 +61,66 @@ class TurnstileVerifier:
     def close(self) -> None:
         if self._owns_client:
             self.client.close()
+
+    def issue_receipt(
+        self,
+        parcel_reference: str,
+        *,
+        now: int | None = None,
+    ) -> str | None:
+        """Create a short-lived receipt bound to one parcel after Turnstile succeeds."""
+
+        secret = self.settings.turnstile_secret_key
+        if not self.settings.captcha_required or not secret:
+            return None
+        expires_at = (int(time.time()) if now is None else now) + HUMAN_CHECK_MAX_AGE_SECONDS
+        parcel_digest = self._parcel_digest(parcel_reference)
+        unsigned = f"v1.{expires_at}.{parcel_digest}"
+        signature = hmac.new(
+            secret.encode("utf-8"),
+            f"propioscan-human-check:{unsigned}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"{unsigned}.{signature}"
+
+    def accepts_receipt(
+        self,
+        receipt: str | None,
+        parcel_reference: str,
+        *,
+        now: int | None = None,
+    ) -> bool:
+        """Return whether a receipt is authentic, current, and for this parcel."""
+
+        secret = self.settings.turnstile_secret_key
+        if not self.settings.captcha_required or not secret or not receipt:
+            return False
+        try:
+            version, expires_value, parcel_digest, supplied_signature = receipt.split(
+                ".", 3
+            )
+            expires_at = int(expires_value)
+        except (TypeError, ValueError):
+            return False
+        checked_at = int(time.time()) if now is None else now
+        if version != "v1" or expires_at < checked_at:
+            return False
+        if not secrets.compare_digest(
+            parcel_digest, self._parcel_digest(parcel_reference)
+        ):
+            return False
+        unsigned = f"{version}.{expires_at}.{parcel_digest}"
+        expected_signature = hmac.new(
+            secret.encode("utf-8"),
+            f"propioscan-human-check:{unsigned}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return secrets.compare_digest(supplied_signature, expected_signature)
+
+    @staticmethod
+    def _parcel_digest(parcel_reference: str) -> str:
+        normalized = " ".join(parcel_reference.strip().casefold().split())
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     @property
     def uses_test_keys(self) -> bool:

@@ -453,6 +453,7 @@
             <thead><tr><th>Ime</th><th>Vrsta</th><th>Namen</th><th>Hramba</th></tr></thead>
             <tbody>
               <tr><td><code>propioscan_cookie_consent</code></td><td>Nujni piškotek</td><td>Izbrane kategorije in različica soglasja</td><td>180 dni</td></tr>
+              <tr><td><code>propioscan_human_check</code></td><td>Nujni varnostni piškotek, HttpOnly</td><td>Za isto parcelo omogoči neposreden ponovni pregled po uspešnem preverjanju človeka</td><td>Največ 1 ura</td></tr>
               <tr><td><code>propioscan_recent_searches</code></td><td>Lokalna shramba</td><td>Največ 10 nedavnih parcelnih poizvedb</td><td>30 dni</td></tr>
               <tr><td><code>propioscan_visitor_id</code></td><td>Analitični piškotek, HttpOnly</td><td>Naključni psevdonimni ID za povezavo dovoljenih iskalnih dogodkov</td><td>90 dni</td></tr>
               <tr><td><code>_ga</code>, <code>_ga_*</code></td><td>Google Analytics 4</td><td>Razlikovanje dovoljenih obiskov in sej; nastavita se šele po soglasju</td><td>Največ 90 dni</td></tr>
@@ -471,7 +472,7 @@
 
     <dialog id="privacy-dialog" class="privacy-dialog privacy-policy-dialog" aria-labelledby="privacy-dialog-title">
       <div class="privacy-dialog-head">
-        <div><span>Različica 1.3 · 3. september 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
+        <div><span>Različica 1.4 · 3. september 2026</span><h2 id="privacy-dialog-title">Politika zasebnosti</h2></div>
         <button class="dialog-close" type="button" data-privacy-close aria-label="Zapri politiko zasebnosti">×</button>
       </div>
 
@@ -485,7 +486,7 @@
           <p>Za izvedbo in zaščito zahtevane analize zabeležimo parcelno oznako, identifikator in stanje opravila, čas zahteve, IP naslov, celoten uporabniški agent, iz njega določeno vrsto naprave, družino brskalnika in operacijskega sistema, jezik brskalnika ter gostitelja napotitvene strani. Zapis nastane ob oddaji analize, ne že ob navadnem ogledu strani. Zaključeno analizo parcele brez podatkov o obiskovalcu lahko največ 7 dni ponovno uporabimo za hitrejši odgovor; ob rezultatu je to jasno označeno in vedno je na voljo nov pregled aktualnih virov. Analiza vsebuje tudi javni lastniški zapis GURS: pri fizičnih osebah le anonimizirano oznako in delež, pri javno imenovanih lastnikih pa naziv in delež. Imen, naslovov ali identifikacijskih številk fizičnih oseb ne pridobivamo in ne hranimo.</p>
           <p>Za skrbniški pregled lahko iz IP-ja in uporabniškega agenta izračunamo kratko tehnično oznako skupine <code>T-*</code>. To je le približek: več oseb lahko uporablja isto oznako, ista oseba pa lahko uporablja več oznak. Oznake ne uporabljamo za avtomatizirano odločanje ali oglaševanje.</p>
           <p>Če dovolite funkcionalno hrambo, brskalnik lokalno shrani nedavne poizvedbe. Če dovolite analitiko, shranimo naključni ID brskalnika, čas dogodka in iskano parcelno oznako ter ta ID povežemo z operativnim zapisom zahteve. Šele po istem soglasju se lahko naloži Google Analytics 4, ki prejme podatke o ogledu strani, približni državi, napravi, brskalniku, napotitvi in nadzorovanih dogodkih, kot so začetek ali zaključek analize, odprt rezultatni zavihek in prenos poročila. V dogodke za Google ne vključimo parcelne oznake, ID-ja opravila, vsebine dokumentov ali besedila napake.</p>
-          <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve.</p>
+          <p>Za zaščito obrazca pred avtomatiziranimi zahtevami uporabljamo Cloudflare Turnstile. Pri varnostnem preverjanju lahko Cloudflare obdela naslov IP ter tehnične podatke o brskalniku in napravi; preveritveni žeton je kratkotrajen in se uporabi samo za odobritev zahteve. Po uspešnem preverjanju nastavimo nujni, podpisani in HttpOnly varnostni piškotek, ki največ eno uro omogoča neposreden ponovni pregled samo iste parcele; piškotek ne vsebuje parcelne oznake v berljivi obliki.</p>
           <p>Ne zbiramo imena ali e-pošte obiskovalca in ne ustvarjamo oglaševalskega profila. Naključni analitični ID in tehnična oznaka označujeta brskalnik oziroma tehnično okolje in nista potrjena identiteta osebe.</p>
         </section>
         <section>
@@ -506,6 +507,7 @@
           <h3>5. Roki hrambe</h3>
           <ul>
             <li>izbira piškotkov: 180 dni;</li>
+            <li>potrdilo uspešnega preverjanja človeka za ponovni pregled iste parcele: največ 1 ura;</li>
             <li>nedavna iskanja v vašem brskalniku: 30 dni oziroma do preklica;</li>
             <li>psevdonimni ID in dovoljeni analitični dogodki: največ 90 dni;</li>
             <li>analitična piškotka Google Analytics 4: največ 90 dni; dogodkovni podatki v storitvi Google Analytics največ 2 meseca;</li>

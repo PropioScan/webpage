@@ -153,6 +153,10 @@ async function requestParcelSearch(parcelReference, forceRefresh = false) {
   buttonLabel.textContent = "Preverjanje …";
 
   try {
+    if (forceRefresh) {
+      await beginParcelSearch(parcelReference, null, true);
+      return;
+    }
     const config = await getPublicConfig();
     if (config.captcha_required) {
       if (!config.captcha_configured || !config.turnstile_site_key) {
@@ -186,6 +190,7 @@ async function requestParcelSearch(parcelReference, forceRefresh = false) {
 
 async function beginParcelSearch(parcelReference, captchaToken, forceRefresh = false) {
   if (searchStarting) return;
+  let waitingForCaptcha = false;
   searchStarting = true;
   captchaAwaiting = false;
   captchaVerifiedToken = null;
@@ -213,6 +218,20 @@ async function beginParcelSearch(parcelReference, captchaToken, forceRefresh = f
         force_refresh: forceRefresh,
       }),
     });
+    if (response.status === 428 && forceRefresh && !captchaToken) {
+      const config = await getPublicConfig();
+      if (!config.captcha_configured || !config.turnstile_site_key) {
+        throw new Error("Varnostno preverjanje ni konfigurirano. Obrnite se na upravljavca strani.");
+      }
+      searchStarting = false;
+      statusPanel.hidden = true;
+      pendingParcelReference = parcelReference;
+      pendingForceRefresh = true;
+      captchaAwaiting = true;
+      await showCaptcha(config.turnstile_site_key);
+      waitingForCaptcha = true;
+      return;
+    }
     if (!response.ok) throw new Error(await errorMessage(response));
     rememberRecentSearch(parcelReference);
     recordSearchEvent(parcelReference);
@@ -228,12 +247,14 @@ async function beginParcelSearch(parcelReference, captchaToken, forceRefresh = f
     showError(error.message || "Analize ni bilo mogoče začeti.");
   } finally {
     searchStarting = false;
-    pendingParcelReference = null;
-    pendingForceRefresh = false;
-    button.disabled = false;
-    if (cacheRefresh) cacheRefresh.disabled = false;
-    buttonLabel.textContent = "Analiziraj";
-    if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
+    if (!waitingForCaptcha) {
+      pendingParcelReference = null;
+      pendingForceRefresh = false;
+      button.disabled = false;
+      if (cacheRefresh) cacheRefresh.disabled = false;
+      buttonLabel.textContent = "Analiziraj";
+      if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
+    }
   }
 }
 
@@ -384,6 +405,14 @@ async function showCaptcha(siteKey) {
       captchaMessage.textContent = "Preverjanje je uspešno. Zdaj lahko zaženete analizo.";
       captchaCheck.disabled = true;
       captchaCheck.querySelector("strong").textContent = "Preverjeno";
+      if (pendingForceRefresh && pendingParcelReference) {
+        const parcelReference = pendingParcelReference;
+        captchaVerifiedToken = null;
+        captchaMessage.textContent = "Preverjanje je uspešno. Začenjamo nov pregled …";
+        buttonLabel.textContent = "Analiziram …";
+        window.setTimeout(() => beginParcelSearch(parcelReference, token, true), 0);
+        return;
+      }
       button.disabled = false;
       buttonLabel.textContent = pendingForceRefresh ? "Preveri znova" : "Analiziraj";
     },

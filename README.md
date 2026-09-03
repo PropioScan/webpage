@@ -43,8 +43,10 @@ The application uses the public [GURS WFS services](https://www.e-prostor.gov.si
   `JOB_PYTHON_EXECUTABLE`) to detach each analysis from the short-lived web
   worker that accepted it.
 - Cloudflare Turnstile protects the analysis endpoint with a user-triggered,
-  server-validated, single-use anti-bot token. Local development uses Cloudflare's
-  interactive test widget; production must replace both test keys.
+  server-validated, single-use anti-bot token. A signed HttpOnly receipt lets the
+  same browser immediately refresh the same parcel for one hour without another
+  challenge. Local development uses Cloudflare's interactive test widget;
+  production must replace both test keys.
 - A fourth results tab maps the analysis into all 10 sections of the official
   location-information template and downloads a branded, pre-filled PDF. Fields
   that cannot be established from the checked sources are explicitly marked for
@@ -133,6 +135,9 @@ available.
 
 - The necessary `propioscan_cookie_consent` cookie stores the selected
   categories for 180 days.
+- The necessary signed, HttpOnly `propioscan_human_check` cookie remembers a
+  successful human check for one hour and is bound to a hash of one parcel. It
+  only permits that browser to request an immediate fresh check of that parcel.
 - Functional consent stores up to 10 recent parcel searches in browser-local
   storage for 30 days. It is not sent to the server for this feature.
 - Analytics consent writes the searched parcel reference, timestamp, consent

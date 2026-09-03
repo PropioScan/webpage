@@ -19,6 +19,8 @@ from .admin import (
     AdminRateLimitError,
 )
 from .captcha import (
+    HUMAN_CHECK_COOKIE,
+    HUMAN_CHECK_MAX_AGE_SECONDS,
     CaptchaRejectedError,
     CaptchaUnavailableError,
     TurnstileVerifier,
@@ -531,15 +533,30 @@ def start_search(
     search_request: SearchRequest,
     request: Request,
     propioscan_visitor_id: str | None = Cookie(default=None),
+    human_check_receipt: str | None = Cookie(
+        default=None, alias=HUMAN_CHECK_COOKIE
+    ),
 ) -> Response:
     remote_ip = request.client.host if request.client else None
+    parcel_reference = search_request.parcel_number.strip()
+    reused_human_check = bool(
+        search_request.force_refresh
+        and not search_request.captcha_token
+        and captcha.accepts_receipt(human_check_receipt, parcel_reference)
+    )
     try:
-        captcha.verify(
-            search_request.captcha_token,
-            remote_ip,
-            request.url.hostname,
-        )
+        if not reused_human_check:
+            captcha.verify(
+                search_request.captcha_token,
+                remote_ip,
+                request.url.hostname,
+            )
     except CaptchaRejectedError as exc:
+        if search_request.force_refresh and not search_request.captcha_token:
+            raise HTTPException(
+                status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+                detail="Za nov pregled je potrebno ponovno varnostno preverjanje.",
+            ) from exc
         raise HTTPException(
             status_code=400,
             detail="Varnostno preverjanje ni uspelo. Potrdite, da niste robot, in poskusite znova.",
@@ -549,7 +566,6 @@ def start_search(
             status_code=503,
             detail="Varnostno preverjanje trenutno ni na voljo. Poskusite znova pozneje.",
         ) from exc
-    parcel_reference = search_request.parcel_number.strip()
     analytics_consent = bool(
         search_request.analytics_consent and search_request.consent_version == "1.2"
     )
@@ -583,6 +599,18 @@ def start_search(
         status_code=status.HTTP_202_ACCEPTED,
         headers={"Cache-Control": "no-store"},
     )
+    if not reused_human_check:
+        receipt = captcha.issue_receipt(parcel_reference)
+        if receipt:
+            response.set_cookie(
+                key=HUMAN_CHECK_COOKIE,
+                value=receipt,
+                max_age=HUMAN_CHECK_MAX_AGE_SECONDS,
+                secure=request.url.scheme == "https",
+                httponly=True,
+                samesite="strict",
+                path="/",
+            )
     if visitor_id:
         response.set_cookie(
             key="propioscan_visitor_id",

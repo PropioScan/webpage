@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from app.captcha import (
+    HUMAN_CHECK_MAX_AGE_SECONDS,
     TURNSTILE_SITEVERIFY_URL,
     CaptchaRejectedError,
     CaptchaUnavailableError,
@@ -84,5 +85,26 @@ def test_turnstile_test_keys_are_refused_on_a_public_hostname(settings):
     try:
         with pytest.raises(CaptchaUnavailableError):
             verifier.verify("XXXX.DUMMY.TOKEN.XXXX", "203.0.113.2", "propioscan.com")
+    finally:
+        verifier.close()
+
+
+def test_human_check_receipt_is_short_lived_and_bound_to_one_parcel(settings):
+    verifier = TurnstileVerifier(captcha_settings(settings))
+    try:
+        receipt = verifier.issue_receipt("2102 1030/15", now=1_000)
+
+        assert receipt
+        assert verifier.accepts_receipt(receipt, " 2102   1030/15 ", now=1_001)
+        assert not verifier.accepts_receipt(receipt, "2057 314/4", now=1_001)
+        assert not verifier.accepts_receipt(
+            receipt,
+            "2102 1030/15",
+            now=1_000 + HUMAN_CHECK_MAX_AGE_SECONDS + 1,
+        )
+        replacement = "0" if receipt[-1] != "0" else "1"
+        assert not verifier.accepts_receipt(
+            f"{receipt[:-1]}{replacement}", "2102 1030/15", now=1_001
+        )
     finally:
         verifier.close()
