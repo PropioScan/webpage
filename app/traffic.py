@@ -25,6 +25,28 @@ GROUP_BY_VALUES = {
     "status",
 }
 STATUS_VALUES = {"queued", "running", "completed", "failed"}
+STATUS_LABELS = {
+    "queued": "V čakalni vrsti",
+    "running": "V teku",
+    "completed": "Zaključeno",
+    "failed": "Napaka",
+}
+DEVICE_LABELS = {
+    "desktop": "Namizni računalnik",
+    "mobile": "Telefon",
+    "tablet": "Tablica",
+    "bot": "Robot",
+    "unknown": "Neznana naprava",
+}
+GROUP_LABELS = {
+    "visitor": "ID obiskovalca",
+    "technical": "Tehnična skupina",
+    "ip": "IP naslov",
+    "parcel": "Parcela",
+    "device": "Naprava",
+    "day": "Dan",
+    "status": "Stanje",
+}
 OPENAI_USAGE_COLUMNS = {
     "openai_usage_synced": "INTEGER NOT NULL DEFAULT 0",
     "openai_configured": "INTEGER NOT NULL DEFAULT 0",
@@ -400,7 +422,7 @@ class TrafficStore:
     ) -> tuple[str, str]:
         report = self.openai_usage_report(days, now=now)
         output = io.StringIO(newline="")
-        writer = csv.writer(output)
+        writer = csv.writer(output, delimiter=";", lineterminator="\r\n")
         writer.writerow(
             ("Propioscan · OpenAI poraba", f"Zadnjih {report['period_days']} dni")
         )
@@ -418,19 +440,19 @@ class TrafficStore:
             writer.writerow((label, report["summary"][key]))
         writer.writerow(())
         fields = (
-            "requested_at",
-            "parcel_reference",
-            "job_id",
-            "model",
-            "calls",
-            "input_tokens",
-            "output_tokens",
-            "total_tokens",
-            "failures",
+            ("requested_at", "Čas zahteve"),
+            ("parcel_reference", "Parcela"),
+            ("job_id", "ID opravila"),
+            ("model", "Model"),
+            ("calls", "API klici"),
+            ("input_tokens", "Vhodni tokeni"),
+            ("output_tokens", "Izhodni tokeni"),
+            ("total_tokens", "Skupaj tokeni"),
+            ("failures", "Napake"),
         )
-        writer.writerow(fields)
+        writer.writerow(tuple(label for _, label in fields))
         for row in report["recent"]:
-            writer.writerow(tuple(row.get(field, "") for field in fields))
+            writer.writerow(tuple(row.get(field, "") for field, _ in fields))
         return f"propioscan-openai-{report['period_days']}-dni.csv", output.getvalue()
 
     def query(
@@ -458,52 +480,67 @@ class TrafficStore:
         rows = self._filtered_rows(filters)
         group_by = filters.normalized_group_by()
         output = io.StringIO(newline="")
+        writer = csv.writer(output, delimiter=";", lineterminator="\r\n")
         if group_by != "none":
             groups = self._groups(rows, group_by)
-            fields = [
-                "group_by",
-                "group",
-                "request_count",
-                "unique_ips",
-                "last_request",
-            ]
-            writer = csv.DictWriter(output, fieldnames=fields)
-            writer.writeheader()
+            writer.writerow(
+                ("Združeno po", "Skupina", "Število zahtev", "Različni IP-ji", "Zadnja zahteva")
+            )
             for group in groups:
                 writer.writerow(
-                    {
-                        "group_by": group_by,
-                        "group": group["label"],
-                        "request_count": group["request_count"],
-                        "unique_ips": group["unique_ips"],
-                        "last_request": group["last_request"],
-                    }
+                    (
+                        GROUP_LABELS.get(group_by, group_by),
+                        group["label"],
+                        group["request_count"],
+                        group["unique_ips"],
+                        group["last_request"],
+                    )
                 )
             filename = f"propioscan-statistika-{group_by}.csv"
         else:
-            fields = [
-                "request_id",
-                "job_id",
-                "requested_at",
-                "parcel_reference",
-                "status",
-                "status_updated_at",
-                "ip_address",
-                "visitor_id",
-                "technical_group",
-                "device_type",
-                "browser_family",
-                "os_family",
-                "user_agent",
-                "accept_language",
-                "referer_host",
-                "analytics_consent",
-                "consent_version",
-            ]
-            writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
-            writer.writeheader()
+            writer.writerow(
+                (
+                    "ID zahteve",
+                    "ID opravila",
+                    "Čas zahteve",
+                    "Parcela",
+                    "Stanje",
+                    "Posodobitev stanja",
+                    "IP naslov",
+                    "ID obiskovalca",
+                    "Tehnična skupina",
+                    "Vrsta naprave",
+                    "Brskalnik",
+                    "Operacijski sistem",
+                    "Uporabniški agent",
+                    "Jezik brskalnika",
+                    "Gostitelj napotitve",
+                    "Analitično soglasje",
+                    "Različica soglasja",
+                )
+            )
             for row in rows:
-                writer.writerow(dict(row))
+                writer.writerow(
+                    (
+                        row["request_id"],
+                        row["job_id"],
+                        row["requested_at"],
+                        row["parcel_reference"],
+                        STATUS_LABELS.get(row["status"], row["status"]),
+                        row["status_updated_at"],
+                        row["ip_address"],
+                        row["visitor_id"] or "",
+                        row["technical_group"],
+                        DEVICE_LABELS.get(row["device_type"], row["device_type"]),
+                        _technical_label(row["browser_family"]),
+                        _technical_label(row["os_family"]),
+                        row["user_agent"],
+                        row["accept_language"],
+                        row["referer_host"],
+                        "DA" if row["analytics_consent"] else "NE",
+                        row["consent_version"] or "",
+                    )
+                )
             filename = "propioscan-zahteve.csv"
         return filename, output.getvalue()
 
@@ -653,12 +690,17 @@ class TrafficStore:
                 key = label = row["parcel_reference"]
             elif group_by == "device":
                 key = label = " · ".join(
-                    (row["device_type"], row["browser_family"], row["os_family"])
+                    (
+                        DEVICE_LABELS.get(row["device_type"], row["device_type"]),
+                        _technical_label(row["browser_family"]),
+                        _technical_label(row["os_family"]),
+                    )
                 )
             elif group_by == "day":
                 key = label = row["requested_at"][:10]
             else:
-                key = label = row["status"]
+                key = row["status"]
+                label = STATUS_LABELS.get(key, key)
             item = grouped.setdefault(
                 key,
                 {
@@ -718,6 +760,10 @@ def classify_user_agent(user_agent: str) -> tuple[str, str, str]:
     else:
         operating_system = "Other"
     return device, browser, operating_system
+
+
+def _technical_label(value: str) -> str:
+    return "Drugo" if value in {"Other", "unknown"} else value
 
 
 def normalize_ip(value: str | None) -> str:

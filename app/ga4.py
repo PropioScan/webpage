@@ -23,6 +23,35 @@ CUSTOM_EVENTS = (
     "result_tab_opened",
     "location_report_downloaded",
 )
+CHANNEL_LABELS = {
+    "Direct": "Neposredno",
+    "Organic Search": "Organsko iskanje",
+    "Referral": "Povezave z drugih strani",
+    "Organic Social": "Družbena omrežja",
+    "Unassigned": "Nedoločeno",
+}
+DEVICE_LABELS = {
+    "desktop": "Namizni računalnik",
+    "mobile": "Telefon",
+    "tablet": "Tablica",
+}
+EVENT_LABELS = {
+    "parcel_analysis_started": "Začete analize",
+    "parcel_analysis_completed": "Zaključene analize",
+    "parcel_analysis_failed": "Neuspele analize",
+    "result_tab_opened": "Odprti zavihki rezultatov",
+    "location_report_downloaded": "Prenesena poročila PDF",
+}
+COUNTRY_LABELS = {
+    "Slovenia": "Slovenija",
+    "Austria": "Avstrija",
+    "Croatia": "Hrvaška",
+    "Italy": "Italija",
+    "Germany": "Nemčija",
+    "Hungary": "Madžarska",
+    "United States": "Združene države Amerike",
+    "United Kingdom": "Združeno kraljestvo",
+}
 
 
 class Ga4ConfigurationError(RuntimeError):
@@ -85,7 +114,7 @@ class Ga4Reporter:
     def export_csv(self, days: int = 30) -> tuple[str, str]:
         report = self.report(days)
         output = io.StringIO(newline="")
-        writer = csv.writer(output)
+        writer = csv.writer(output, delimiter=";", lineterminator="\r\n")
         writer.writerow(("Propioscan · Google Analytics 4", f"Zadnjih {days} dni"))
         writer.writerow(())
         writer.writerow(("Povzetek", "Vrednost"))
@@ -99,17 +128,30 @@ class Ga4Reporter:
         ):
             writer.writerow((label, report["summary"].get(key, 0)))
         for key, title, columns in (
-            ("daily", "Po dnevih", ("date", "active_users", "sessions", "page_views")),
-            ("channels", "Viri obiska", ("channel", "sessions", "total_users")),
-            ("devices", "Naprave", ("device", "total_users")),
-            ("countries", "Države", ("country", "total_users")),
-            ("events", "Dogodki Propioscan", ("event", "event_count")),
+            (
+                "daily",
+                "Po dnevih",
+                (("date", "Datum"), ("active_users", "Aktivni uporabniki"), ("sessions", "Seje"), ("page_views", "Ogledi strani")),
+            ),
+            (
+                "channels",
+                "Viri obiska",
+                (("channel", "Vir obiska"), ("sessions", "Seje"), ("total_users", "Uporabniki")),
+            ),
+            ("devices", "Naprave", (("device", "Naprava"), ("total_users", "Uporabniki"))),
+            ("countries", "Države", (("country", "Država"), ("total_users", "Uporabniki"))),
+            ("events", "Dogodki Propioscan", (("event", "Dogodek"), ("event_count", "Število"))),
         ):
             writer.writerow(())
             writer.writerow((title,))
-            writer.writerow(columns)
+            writer.writerow(tuple(label for _, label in columns))
             for row in report[key]:
-                writer.writerow(tuple(row.get(column, "") for column in columns))
+                writer.writerow(
+                    tuple(
+                        _localized_export_value(key, column, row.get(column, ""))
+                        for column, _ in columns
+                    )
+                )
         return f"propioscan-ga4-{days}-dni.csv", output.getvalue()
 
     def _access_token(self) -> str:
@@ -326,3 +368,15 @@ def _number(value: str) -> int | float:
     except (TypeError, ValueError):
         return 0
     return int(number) if number.is_integer() else number
+
+
+def _localized_export_value(section: str, column: str, value: Any) -> Any:
+    if section == "channels" and column == "channel":
+        return CHANNEL_LABELS.get(str(value), value)
+    if section == "devices" and column == "device":
+        return DEVICE_LABELS.get(str(value), value)
+    if section == "events" and column == "event":
+        return EVENT_LABELS.get(str(value), value)
+    if section == "countries" and column == "country":
+        return COUNTRY_LABELS.get(str(value), value)
+    return value

@@ -90,15 +90,15 @@ class PDFParser:
         mostly_empty = parsed.pages and empty_pages / len(parsed.pages) >= 0.6
         if mostly_empty:
             parsed.warnings.append(
-                f"{empty_pages} of {len(parsed.pages)} pages contain no extractable text."
+                f"Na {empty_pages} od {len(parsed.pages)} strani ni bilo mogoče izluščiti besedila."
             )
             ocr_path = self._ocr(path, checksum)
             if ocr_path:
                 reparsed = self._extract_with_pypdf(ocr_path)
-                reparsed.warnings.append("Scanned pages were processed with OCRmyPDF.")
+                reparsed.warnings.append("Skenirane strani so bile obdelane z OCRmyPDF.")
                 return reparsed
             parsed.warnings.append(
-                "OCR was unavailable; mentions on scanned pages may be missing. Install OCRmyPDF with Slovenian language data."
+                "OCR ni bil na voljo, zato so lahko omembe na skeniranih straneh izpuščene. Namestite OCRmyPDF s slovenskimi jezikovnimi podatki."
             )
         return parsed
 
@@ -106,7 +106,7 @@ class PDFParser:
         try:
             reader = PdfReader(path, strict=False)
             if reader.is_encrypted and reader.decrypt("") == 0:
-                raise PDFExtractionError(f"{path.name} is password protected.")
+                raise PDFExtractionError(f"Datoteka {path.name} je zaščitena z geslom.")
             pages: list[str] = []
             warnings: list[str] = []
             for index, page in enumerate(reader.pages, start=1):
@@ -117,13 +117,13 @@ class PDFParser:
                         text = page.extract_text() or ""
                 except Exception:
                     text = ""
-                    warnings.append(f"Text extraction failed on page {index}.")
+                    warnings.append(f"Izluščenje besedila na strani {index} ni uspelo.")
                 pages.append(text)
             return PDFText(pages=pages, warnings=warnings)
         except PDFExtractionError:
             raise
         except Exception as exc:
-            raise PDFExtractionError(f"Could not read {path.name} as a PDF.") from exc
+            raise PDFExtractionError(f"Datoteke {path.name} ni bilo mogoče prebrati kot PDF.") from exc
 
     def _ocr(self, path: Path, checksum: str) -> Path | None:
         executable = shutil.which("ocrmypdf")

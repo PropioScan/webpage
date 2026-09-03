@@ -55,22 +55,23 @@ def test_csv_export_uses_selected_grouping_and_filters(tmp_path):
     _record(store, "r3", "c" * 32, "2057 999/1", "192.0.2.2", now)
 
     filename, content = store.export_csv(RequestFilters(parcel="314/4", group_by="ip"))
-    rows = list(csv.DictReader(io.StringIO(content)))
+    rows = list(csv.DictReader(io.StringIO(content), delimiter=";"))
 
     assert filename == "propioscan-statistika-ip.csv"
     assert rows == [
         {
-            "group_by": "ip",
-            "group": "192.0.2.1",
-            "request_count": "2",
-            "unique_ips": "1",
-            "last_request": now.isoformat(),
+            "Združeno po": "IP naslov",
+            "Skupina": "192.0.2.1",
+            "Število zahtev": "2",
+            "Različni IP-ji": "1",
+            "Zadnja zahteva": now.isoformat(),
         }
     ]
 
     _, detailed = store.export_csv(RequestFilters(parcel="314/4", group_by="none"))
-    assert "user_agent" in detailed.splitlines()[0]
-    assert "analytics_consent" in detailed.splitlines()[0]
+    assert "Uporabniški agent" in detailed.splitlines()[0]
+    assert "Analitično soglasje" in detailed.splitlines()[0]
+    assert "Telefon" in detailed
 
 
 def test_traffic_retention_and_visitor_withdrawal(tmp_path):
@@ -188,7 +189,8 @@ def test_openai_usage_is_synced_from_jobs_aggregated_and_exported(tmp_path):
 
     filename, content = store.export_openai_usage_csv(7, now=now)
     assert filename == "propioscan-openai-7-dni.csv"
-    assert "Vhodni tokeni,1800" in content
+    assert "Vhodni tokeni;1800" in content
+    assert "Čas zahteve;Parcela;ID opravila" in content
     assert "2057 314/4" in content
 
 

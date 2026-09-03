@@ -356,7 +356,7 @@ def admin_requests_csv(
         )
     )
     return Response(
-        content="\ufeff" + content,
+        content=content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
@@ -430,7 +430,7 @@ def admin_analytics_csv(request: Request, days: int = 30) -> Response:
             detail="Poročila Google Analytics trenutno ni mogoče prenesti.",
         ) from exc
     return Response(
-        content="\ufeff" + content,
+        content=content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
@@ -457,7 +457,7 @@ def admin_openai_usage_csv(request: Request, days: int = 30) -> Response:
     traffic.refresh_job_statuses(settings.data_dir / "jobs")
     filename, content = traffic.export_openai_usage_csv(days)
     return Response(
-        content="\ufeff" + content,
+        content=content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
@@ -628,7 +628,7 @@ def start_search(
 def get_search(job_id: str) -> JobView:
     job = jobs.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Search job not found.")
+        raise HTTPException(status_code=404, detail="Opravilo analize ni bilo najdeno.")
     try:
         traffic.update_job_status(job.id, job.status.value, job.updated_at)
     except Exception:
@@ -649,9 +649,9 @@ def _require_admin(request: Request) -> dict:
 def download_location_report(job_id: str) -> Response:
     job = jobs.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Search job not found.")
+        raise HTTPException(status_code=404, detail="Opravilo analize ni bilo najdeno.")
     if job.result is None or job.status.value != "completed":
-        raise HTTPException(status_code=409, detail="Search result is not ready.")
+        raise HTTPException(status_code=409, detail="Rezultat analize še ni pripravljen.")
     try:
         pdf = generate_location_report(
             job.result,
@@ -687,7 +687,7 @@ def download_file(act_id: int, filename: str) -> FileResponse:
         or not candidate.is_file()
         or candidate.suffix.lower() != ".pdf"
     ):
-        raise HTTPException(status_code=404, detail="PDF not found.")
+        raise HTTPException(status_code=404, detail="Datoteka PDF ni bila najdena.")
     return FileResponse(
         candidate,
         media_type="application/pdf",
@@ -705,5 +705,5 @@ def map_preview(act_id: int, filename: str) -> FileResponse:
         or not candidate.is_file()
         or candidate.suffix.lower() != ".png"
     ):
-        raise HTTPException(status_code=404, detail="Map preview not found.")
+        raise HTTPException(status_code=404, detail="Predogled zemljevida ni bil najden.")
     return FileResponse(candidate, media_type="image/png")

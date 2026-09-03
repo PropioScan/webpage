@@ -273,8 +273,8 @@ function renderRequestRows(body, rows, compact) {
         item.ip_address,
         item.visitor_id ? item.visitor_id.slice(0, 8) : "—",
         item.technical_group,
-        item.device_type,
-        `${item.browser_family} / ${item.os_family}`,
+        analyticsDeviceLabel(item.device_type),
+        `${technicalLabel(item.browser_family)} / ${technicalLabel(item.os_family)}`,
         item.accept_language || "—",
         item.referer_host || "—",
         item.analytics_consent ? `Da (${item.consent_version || "—"})` : "Ne",
@@ -343,7 +343,7 @@ async function loadAnalytics(forceRefresh = false) {
   renderAnalyticsTable(
     "#analytics-countries",
     data.countries,
-    (row) => [row.country || "—", formatNumber(row.total_users)],
+    (row) => [countryLabel(row.country), formatNumber(row.total_users)],
     2,
   );
   document.querySelector("#analytics-generated").textContent = `Osveženo ${formatDate(data.generated_at)}`;
@@ -410,7 +410,7 @@ function renderAnalyticsTable(selector, rows, values, columns) {
 }
 
 function channelLabel(value) {
-  return ({ Direct: "Neposredno", "Organic Search": "Organsko iskanje", Referral: "Povezave", "Organic Social": "Družbena omrežja", Unassigned: "Nedoločeno" })[value] || value || "—";
+  return ({ Direct: "Neposredno", "Organic Search": "Organsko iskanje", Referral: "Povezave z drugih strani", "Organic Social": "Družbena omrežja", Unassigned: "Nedoločeno" })[value] || value || "—";
 }
 
 function eventLabel(value) {
@@ -418,7 +418,15 @@ function eventLabel(value) {
 }
 
 function analyticsDeviceLabel(value) {
-  return ({ desktop: "Namizni računalnik", mobile: "Telefon", tablet: "Tablica" })[value] || value || "—";
+  return ({ desktop: "Namizni računalnik", mobile: "Telefon", tablet: "Tablica", bot: "Robot", unknown: "Neznana naprava" })[value] || value || "—";
+}
+
+function technicalLabel(value) {
+  return ({ Other: "Drugo", unknown: "Neznano" })[value] || value || "—";
+}
+
+function countryLabel(value) {
+  return ({ Slovenia: "Slovenija", Austria: "Avstrija", Croatia: "Hrvaška", Italy: "Italija", Germany: "Nemčija", Hungary: "Madžarska", "United States": "Združene države Amerike", "United Kingdom": "Združeno kraljestvo" })[value] || value || "—";
 }
 
 function formatAnalyticsDate(value) {
@@ -604,5 +612,5 @@ function statusLabel(value) {
 }
 
 function deviceLabel(item) {
-  return `${item.device_type} · ${item.browser_family}`;
+  return `${analyticsDeviceLabel(item.device_type)} · ${technicalLabel(item.browser_family)}`;
 }

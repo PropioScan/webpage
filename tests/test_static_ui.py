@@ -145,6 +145,33 @@ def test_document_explanations_are_presented_in_slovenian():
     assert "literal mention" not in script
 
 
+def test_refreshed_result_replaces_old_content_and_overview_is_in_slovenian():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "function renderResult(result, job) {\n  resetView();" in script
+    for text in (
+        "Uradna oznaka parcele",
+        "Površina",
+        "Boniteta zemljišča",
+        "Katastrski dohodek",
+        "Stavbna parcela",
+        "Omejitev v katastru nepremičnin",
+        "Posplošena vrednost GURS",
+        "Evidentirana raba",
+    ):
+        assert text in script
+    for text in (
+        "Official parcel reference",
+        "Land quality score",
+        "Cadastral income",
+        "Building parcel",
+        "Restriction in KN",
+        "GURS generalized value",
+        "Recorded use",
+    ):
+        assert text not in script
+
+
 def test_analysis_requires_a_user_triggered_turnstile_check():
     page = _page()
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
@@ -419,6 +446,9 @@ def test_admin_panel_has_human_checked_login_filters_exports_and_logs():
     assert "renderOpenAISummary" in script
     assert "renderOpenAIRateLimit" in script
     assert "Tehnična skupina ni oseba" in page.text_content()
+    assert "Prenesi izbrani CSV za Excel" in page.text_content()
+    assert "analyticsDeviceLabel(item.device_type)" in script
+    assert "countryLabel(row.country)" in script
 
 
 def test_location_report_has_official_structure_and_local_download():

@@ -483,9 +483,9 @@ async function pollJob(jobId) {
 async function errorMessage(response) {
   try {
     const body = await response.json();
-    return body.detail || `Request failed (${response.status}).`;
+    return body.detail || `Zahteva ni uspela (${response.status}).`;
   } catch {
-    return `Request failed (${response.status}).`;
+    return `Zahteva ni uspela (${response.status}).`;
   }
 }
 
@@ -532,6 +532,7 @@ function showError(message) {
 }
 
 function renderResult(result, job) {
+  resetView();
   const jobId = job.id;
   activeParcelReference = `${result.parcel.cadastral_municipality_id} ${result.parcel.parcel_number}`;
   renderCacheNotice(result, job);
@@ -1447,43 +1448,43 @@ function renderParcel(parcel) {
   const card = element("article", "parcel-card");
   const primary = element("div", "parcel-primary");
   const id = element("div", "parcel-id");
-  id.append(element("span", "", "Official parcel reference"), element("strong", "", `${parcel.cadastral_municipality_id} ${parcel.parcel_number}`));
+  id.append(element("span", "", "Uradna oznaka parcele"), element("strong", "", `${parcel.cadastral_municipality_id} ${parcel.parcel_number}`));
   const place = element("div", "parcel-place");
-  place.append(element("strong", "", parcel.municipality || "Municipality unavailable"), document.createTextNode(parcel.cadastral_municipality || "Cadastral municipality unavailable"));
+  place.append(element("strong", "", parcel.municipality || "Občina ni na voljo"), document.createTextNode(parcel.cadastral_municipality || "Katastrska občina ni na voljo"));
   primary.append(id, place);
 
   const facts = element("div", "fact-grid");
   const boundary = parcel.boundary_assessment;
   const factRows = [
-    ["Area", parcel.area_m2 == null ? "Not available" : `${formatNumber(parcel.area_m2)} m²`, parcel.area_determination_method],
+    ["Površina", parcel.area_m2 == null ? "Ni podatka" : `${formatNumber(parcel.area_m2)} m²`, parcel.area_determination_method],
     ["Urejenost meje", boundary?.label || parcel.administrative_status, boundary?.detail, boundary?.status],
-    ["Land quality score", parcel.quality_score, null],
-    ["Cadastral income", parcel.cadastral_income_eur == null ? "Not available" : formatMoney(parcel.cadastral_income_eur), null],
-    ["Building parcel", parcel.building_parcel, null],
-    ["Restriction in KN", parcel.restriction_recorded, null],
+    ["Boniteta zemljišča", parcel.quality_score, null],
+    ["Katastrski dohodek", parcel.cadastral_income_eur == null ? "Ni podatka" : formatMoney(parcel.cadastral_income_eur), null],
+    ["Stavbna parcela", parcel.building_parcel, null],
+    ["Omejitev v katastru nepremičnin", parcel.restriction_recorded, null],
   ];
   factRows.forEach(([label, value, note, boundaryStatus]) => {
     const fact = element("div", "fact");
     if (boundaryStatus) fact.classList.add("boundary-fact", `is-${boundaryStatus}`);
-    fact.append(element("span", "", label), element("strong", "", value ?? "Not available"));
+    fact.append(element("span", "", label), element("strong", "", value ?? "Ni podatka"));
     if (note) fact.append(element("small", "", note));
     facts.append(fact);
   });
   card.append(primary, facts, buildOwnershipSummary(parcel.ownership));
 
   const valuation = element("aside", "valuation-card");
-  valuation.append(element("span", "", "GURS generalized value"), element("strong", "", formatMoney(parcel.official_valuation_eur)));
-  valuation.append(element("p", "", "Model-based official value, not an individual appraisal or sale price."));
+  valuation.append(element("span", "", "Posplošena vrednost GURS"), element("strong", "", formatMoney(parcel.official_valuation_eur)));
+  valuation.append(element("p", "", "Uradna modelska vrednost; ne gre za individualno cenitev ali prodajno ceno."));
   (parcel.valuation_units || []).forEach((unit) => {
     const row = element("div", "valuation-row");
-    const label = element("span", "", `${unit.model_code || "Model"} · ${unit.model_name || "valuation unit"}`);
+    const label = element("span", "", `${unit.model_code || "Model"} · ${unit.model_name || "vrednostna enota"}`);
     if (unit.area_share_percent != null) label.append(document.createTextNode(` · ${unit.area_share_percent}%`));
     row.append(label, element("b", "", formatMoney(unit.generalized_value_eur)));
     valuation.append(row);
   });
   (parcel.land_use || []).forEach((land) => {
     const row = element("div", "valuation-row");
-    row.append(element("span", "", "Recorded use"), element("b", "", `${land.name}${land.share_percent == null ? "" : ` · ${land.share_percent}%`}`));
+    row.append(element("span", "", "Evidentirana raba"), element("b", "", `${land.name}${land.share_percent == null ? "" : ` · ${land.share_percent}%`}`));
     valuation.append(row);
   });
   overview.append(card, valuation);
@@ -1552,7 +1553,7 @@ function renderContext(contexts) {
     card.append(element("span", "context-code", context.land_use_code || "Brez oznake"));
     const share = context.parcel_share_percent == null ? "" : ` · ${context.parcel_share_percent}% parcele`;
     card.append(element("strong", "", `${context.land_use_description || "Opis namenske rabe ni na voljo"}${share}`));
-    const detail = [context.planning_unit && `EUP ${context.planning_unit}`, context.subunit && `subunit ${context.subunit}`].filter(Boolean).join(" · ");
+    const detail = [context.planning_unit && `EUP ${context.planning_unit}`, context.subunit && `PEUP ${context.subunit}`].filter(Boolean).join(" · ");
     card.append(element("p", "", detail || context.act_title || "Prostorska enota ni na voljo"));
     container.append(card);
   });

@@ -77,7 +77,7 @@ class PISArchiveDownloader:
         except (zipfile.BadZipFile, OSError) as exc:
             archive_path.unlink(missing_ok=True)
             raise DocumentDownloadError(
-                f"PIS returned an invalid archive for ‘{act.title}’."
+                f"PIS je za »{act.title}« vrnil neveljaven arhiv."
             ) from exc
         act_dir.mkdir(parents=True, exist_ok=True)
         self._atomic_json_write(
@@ -98,7 +98,7 @@ class PISArchiveDownloader:
             forms = document.xpath(f"//form[@id='{PIS_FORM_ID}']")
             if not forms:
                 raise DocumentDownloadError(
-                    f"PIS did not expose downloadable material for ‘{act.title}’."
+                    f"PIS za »{act.title}« ni ponudil gradiva za prenos."
                 )
             form = forms[0]
             payload = {
@@ -115,14 +115,14 @@ class PISArchiveDownloader:
                 content_type = response.headers.get("content-type", "").lower()
                 if "zip" not in content_type:
                     raise DocumentDownloadError(
-                        f"PIS did not return a document archive for ‘{act.title}’."
+                        f"PIS za »{act.title}« ni vrnil arhiva dokumentov."
                     )
                 with temporary.open("wb") as output:
                     for chunk in response.iter_bytes(1024 * 1024):
                         size += len(chunk)
                         if size > self.settings.max_archive_bytes:
                             raise DocumentDownloadError(
-                                f"The PIS archive for ‘{act.title}’ exceeds the configured limit."
+                                f"Arhiv PIS za »{act.title}« presega nastavljeno omejitev velikosti."
                             )
                         output.write(chunk)
             os.replace(temporary, destination)
@@ -132,7 +132,7 @@ class PISArchiveDownloader:
         except (httpx.HTTPError, OSError, ValueError) as exc:
             destination.with_suffix(".zip.part").unlink(missing_ok=True)
             raise DocumentDownloadError(
-                f"Could not download PIS material for ‘{act.title}’."
+                f"Gradiva PIS za »{act.title}« ni bilo mogoče prenesti."
             ) from exc
 
     def _extract_pdfs(self, archive_path: Path, destination: Path) -> list[CachedPDF]:
@@ -185,7 +185,7 @@ class PISArchiveDownloader:
                 continue
             if member.file_size > self.settings.max_archive_bytes:
                 raise DocumentDownloadError(
-                    f"{PurePosixPath(member.filename).name} exceeds the configured nested archive limit."
+                    f"{PurePosixPath(member.filename).name} presega nastavljeno omejitev ugnezdenega arhiva."
                 )
             with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as nested_file:
                 written = 0
@@ -194,7 +194,7 @@ class PISArchiveDownloader:
                         written += len(chunk)
                         if written > self.settings.max_archive_bytes:
                             raise DocumentDownloadError(
-                                "A nested textual PIS archive exceeds the configured safety limit."
+                                "Ugnezdeni besedilni arhiv PIS presega nastavljeno varnostno omejitev."
                             )
                         nested_file.write(chunk)
                 nested_file.seek(0)
@@ -212,7 +212,7 @@ class PISArchiveDownloader:
                         )
                 except zipfile.BadZipFile as exc:
                     raise DocumentDownloadError(
-                        f"Nested textual archive {PurePosixPath(member.filename).name} is invalid."
+                        f"Ugnezdeni besedilni arhiv {PurePosixPath(member.filename).name} ni veljaven."
                     ) from exc
 
     def _extract_pdf_member(
@@ -229,11 +229,11 @@ class PISArchiveDownloader:
         total_uncompressed[0] += member.file_size
         if member.file_size > self.settings.max_pdf_bytes:
             raise DocumentDownloadError(
-                f"{PurePosixPath(member.filename).name} exceeds the configured PDF limit."
+                f"{PurePosixPath(member.filename).name} presega nastavljeno omejitev velikosti PDF-ja."
             )
         if total_uncompressed[0] > self.settings.max_archive_bytes * 2:
             raise DocumentDownloadError(
-                "The expanded PIS archive exceeds the configured safety limit."
+                "Razširjeni arhiv PIS presega nastavljeno varnostno omejitev."
             )
         digest = hashlib.sha256()
         temporary = destination / f".{len(results)}.pdf.part"
@@ -243,7 +243,7 @@ class PISArchiveDownloader:
                 written += len(chunk)
                 if written > self.settings.max_pdf_bytes:
                     raise DocumentDownloadError(
-                        f"A PDF in {archive_path.name} exceeds the configured limit."
+                        f"Datoteka PDF v arhivu {archive_path.name} presega nastavljeno omejitev."
                     )
                 digest.update(chunk)
                 output.write(chunk)

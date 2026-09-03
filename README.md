@@ -54,8 +54,9 @@ The application uses the public [GURS WFS services](https://www.e-prostor.gov.si
 - File-size limits, fixed official hosts, safe ZIP handling, generated local filenames, and constrained PDF-serving routes.
 - A protected `/admin` panel with Turnstile-checked login, rate limiting,
   eight-hour signed sessions, parcel-request filters, approximate visitor
-  grouping, CSV export for active filters/grouping, and redacted application
-  logs. Raw credentials are never stored in the request database.
+  grouping, Slovenian Excel-friendly UTF-8 CSV exports for active
+  filters/grouping, and redacted application logs. Raw credentials are never
+  stored in the request database.
 
 ## Run locally
 

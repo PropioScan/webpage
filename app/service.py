@@ -54,7 +54,7 @@ class ParcelSearchService:
 
     def search(self, raw_reference: str, progress: ProgressCallback) -> SearchResult:
         reference = parse_parcel_reference(raw_reference)
-        progress(5, "Looking up the parcel in GURS…")
+        progress(5, "Iščemo parcelo v evidenci GURS …")
         gurs = GURSClient(self.settings)
         pis = PISClient(self.settings)
         site_analysis = SiteAnalysisClient(self.settings)
@@ -68,23 +68,23 @@ class ParcelSearchService:
         map_candidates: list[_MapCandidate] = []
         try:
             parcel = gurs.get_parcel(reference)
-            progress(18, "Checking PIS planning layers…")
+            progress(18, "Preverjamo prostorske sloje PIS …")
             acts = pis.find_acts(parcel)
             contexts = pis.planning_context(parcel)
             land_use_assessment = assess_land_use(parcel, contexts)
-            progress(24, "Checking utilities, access, protected areas, and risks…")
+            progress(24, "Preverjamo komunalno opremljenost, dostop, varovanja in tveganja …")
             site_result = site_analysis.analyze(parcel)
             warnings.extend(site_result.warnings)
             if not acts:
                 warnings.append(
-                    "PIS returned no planning-act polygons intersecting this parcel."
+                    "PIS ni vrnil poligona prostorskega akta, ki bi sekal parcelo."
                 )
             total_acts = max(1, len(acts))
             for act_index, act in enumerate(acts):
                 base_progress = 31 + int((act_index / total_acts) * 62)
                 progress(
                     base_progress,
-                    f"Downloading PIS material {act_index + 1}/{len(acts)}: {act.title}",
+                    f"Prenašamo gradivo PIS {act_index + 1}/{len(acts)}: {act.title}",
                 )
                 try:
                     pdfs = downloader.download_pdfs(act)
@@ -93,7 +93,7 @@ class ParcelSearchService:
                     continue
                 if not pdfs:
                     warnings.append(
-                        f"No PDF files were present in the PIS archive for ‘{act.title}’."
+                        f"V arhivu PIS za »{act.title}« ni bilo datotek PDF."
                     )
                     continue
                 act_context = [
@@ -106,7 +106,7 @@ class ParcelSearchService:
                             base_progress
                             + int(((pdf_index + 1) / len(pdfs)) * (62 / total_acts)),
                         ),
-                        f"Analyzing {cached_pdf.source_name}",
+                        f"Analiziramo {cached_pdf.source_name}",
                     )
                     path = (
                         self.settings.data_dir
@@ -191,17 +191,17 @@ class ParcelSearchService:
                                 match=match,
                             )
                         )
-            progress(96, "Loading official municipal planning conditions…")
+            progress(96, "Pridobivamo uradne občinske prostorske pogoje …")
             supplemental_sources, supplemental_warnings = municipal_sources.load(
                 parcel.information.municipality
             )
             planning_text_sources.extend(supplemental_sources)
             warnings.extend(supplemental_warnings)
-            progress(97, "Checking municipal pre-emption provisions…")
+            progress(97, "Preverjamo občinske določbe o predkupni pravici …")
             preemption_right = extract_preemption_right(
                 planning_text_sources, contexts, parcel.information.municipality
             )
-            progress(98, "Preparing the result…")
+            progress(98, "Pripravljamo rezultat …")
             planning_conditions = extract_planning_conditions(
                 planning_text_sources, contexts
             )

@@ -667,7 +667,7 @@ class SiteAnalysisClient:
             except CheckerError:
                 errors += 1
         if errors == 3:
-            raise UpstreamServiceError("GJI parcel layers are unavailable.")
+            raise UpstreamServiceError("Sloji GJI za parcelo niso dosegljivi.")
         return records
 
     def _nearest_line_distance(
@@ -754,7 +754,7 @@ class SiteAnalysisClient:
             document = html.fromstring(response.content)
         except (TypeError, ValueError) as exc:
             raise UpstreamServiceError(
-                "The municipal airport-regime response was unreadable."
+                "Odgovora občinskega sloja režima letališča ni bilo mogoče prebrati."
             ) from exc
         label: str | None = None
         for row in document.xpath("//tr"):
@@ -1118,7 +1118,7 @@ class SiteAnalysisClient:
                 f"{spec.service_url}/{spec.layer_id}/query", params
             )
             if payload.get("error"):
-                raise UpstreamServiceError("GeoHub returned a layer error.")
+                raise UpstreamServiceError("GeoHub je vrnil napako prostorskega sloja.")
             features = payload.get("features") or []
             for feature in features:
                 geometry = feature.get("geometry")

@@ -1,6 +1,8 @@
+import codecs
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from starlette.requests import Request
 
 from app.admin import (
     AdminAuth,
@@ -11,6 +13,21 @@ from app.admin import (
     verify_password,
 )
 from app.traffic import TrafficStore
+
+
+def _request() -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/admin/requests.csv",
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
 
 
 def _auth(tmp_path, *, max_attempts=5):
@@ -86,3 +103,23 @@ def test_admin_log_reader_redacts_secrets(tmp_path):
     assert "hunter2" not in joined
     assert "normal line" in joined
     assert "<redacted>" in joined
+
+
+def test_admin_csv_download_has_utf8_bom_and_excel_friendly_format(monkeypatch):
+    from app import main
+
+    class ExportTraffic:
+        def refresh_job_statuses(self, _jobs_dir) -> None:
+            pass
+
+        def export_csv(self, _filters) -> tuple[str, str]:
+            return "propioscan-zahteve.csv", "Čas zahteve;Parcela\r\n3. 9. 2026;2102 1030/15\r\n"
+
+    monkeypatch.setattr(main, "_require_admin", lambda _request: {"sub": "skrbnik"})
+    monkeypatch.setattr(main, "traffic", ExportTraffic())
+
+    response = main.admin_requests_csv(_request(), group_by="none")
+
+    assert response.body.startswith(codecs.BOM_UTF8)
+    assert "Čas zahteve;Parcela" in response.body.decode("utf-8-sig")
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"

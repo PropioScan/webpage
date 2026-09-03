@@ -142,7 +142,9 @@ def test_ga4_csv_export_contains_each_dashboard_section() -> None:
         "Naprave",
         "Države",
         "Dogodki Propioscan",
-        "parcel_analysis_completed",
+        "Zaključene analize",
+        "Datum;Aktivni uporabniki;Seje;Ogledi strani",
+        "Slovenija",
     ):
         assert text in content
 

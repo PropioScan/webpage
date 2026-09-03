@@ -353,11 +353,11 @@ class GURSClient:
             payload = response.json()
         except ValueError as exc:
             raise UpstreamServiceError(
-                "GURS public ownership service returned an unreadable response."
+                "Javna storitev GURS za lastništvo je vrnila neberljiv odgovor."
             ) from exc
         if not isinstance(payload, dict):
             raise UpstreamServiceError(
-                "GURS public ownership service returned an invalid response."
+                "Javna storitev GURS za lastništvo je vrnila neveljaven odgovor."
             )
 
         rights = payload.get("pravice") or []

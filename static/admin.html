@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#10243d">
     <link rel="icon" type="image/png" href="/static/propioscan-mark.png">
     <link rel="stylesheet" href="/static/admin.css?v=4">
-    <script src="/static/admin.js?v=4" defer></script>
+    <script src="/static/admin.js?v=5" defer></script>
     <title>Propioscan · skrbniška plošča</title>
   </head>
   <body>
@@ -85,7 +85,7 @@
             <div class="analytics-toolbar">
               <label>Obdobje<select id="analytics-period"><option value="7">Zadnjih 7 dni</option><option value="30" selected>Zadnjih 30 dni</option><option value="90">Zadnjih 90 dni</option></select></label>
               <button id="analytics-refresh" type="button">Osveži podatke</button>
-              <a id="analytics-download" href="/api/admin/analytics.csv?days=30" download>Prenesi CSV</a>
+              <a id="analytics-download" href="/api/admin/analytics.csv?days=30" download>Prenesi CSV za Excel</a>
               <a class="analytics-external" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Odpri Google Analytics ↗</a>
             </div>
 
@@ -122,8 +122,8 @@
             <div class="analytics-toolbar">
               <label>Obdobje<select id="openai-period"><option value="7">Zadnjih 7 dni</option><option value="30" selected>Zadnjih 30 dni</option></select></label>
               <button id="openai-refresh" type="button">Osveži podatke</button>
-              <a id="openai-download" href="/api/admin/openai-usage.csv?days=30" download>Prenesi CSV</a>
-              <a class="analytics-external" href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer">Odpri OpenAI Usage ↗</a>
+              <a id="openai-download" href="/api/admin/openai-usage.csv?days=30" download>Prenesi CSV za Excel</a>
+              <a class="analytics-external" href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer">Odpri porabo OpenAI ↗</a>
             </div>
 
             <div id="openai-message" class="analytics-message" role="status" aria-live="polite">Nalagam porabo OpenAI …</div>
@@ -161,7 +161,7 @@
               <label>Stanje<select id="filter-status" name="request_status"><option value="">Vsa</option><option value="completed">Končano</option><option value="failed">Napaka</option><option value="running">V teku</option><option value="queued">V vrsti</option></select></label>
               <label>Obiskovalec / skupina<input id="filter-visitor" name="visitor" placeholder="ID, T-* ali zahteva"></label>
               <label>Združi po<select id="filter-group" name="group_by"><option value="visitor">Dovoljenem ID obiskovalca</option><option value="technical">Tehničnem približku T-*</option><option value="ip">IP naslovu</option><option value="parcel">Parceli</option><option value="device">Vrsti naprave</option><option value="day">Dnevu</option><option value="status">Stanju</option><option value="none">Brez združevanja</option></select></label>
-              <div class="filter-actions"><button type="submit">Uporabi filtre</button><button id="filters-reset" class="secondary" type="button">Ponastavi</button><a id="statistics-download" href="/api/admin/requests.csv" download>Prenesi izbrani CSV</a></div>
+              <div class="filter-actions"><button type="submit">Uporabi filtre</button><button id="filters-reset" class="secondary" type="button">Ponastavi</button><a id="statistics-download" href="/api/admin/requests.csv" download>Prenesi izbrani CSV za Excel</a></div>
             </form>
 
             <div id="request-summary" class="summary-grid"></div>

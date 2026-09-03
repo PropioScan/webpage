@@ -87,7 +87,7 @@ class JobManager:
             id=uuid.uuid4().hex,
             status=JobStatus.queued,
             progress=0,
-            message="Search queued…",
+            message="Analiza je v čakalni vrsti …",
             parcel_number=parcel_number,
             created_at=now,
             updated_at=now,
@@ -192,7 +192,7 @@ class JobManager:
             self._persist_locked(job)
 
     def _run(self, job_id: str, parcel_number: str) -> None:
-        self._update(job_id, 1, "Starting search…")
+        self._update(job_id, 1, "Začenjamo pregled …")
         try:
             result: SearchResult = self.service.search(
                 parcel_number,
@@ -209,7 +209,7 @@ class JobManager:
                 job = self._jobs[job_id]
                 job.status = JobStatus.completed
                 job.progress = 100
-                job.message = "Search completed."
+                job.message = "Analiza je zaključena."
                 job.result = result
                 job.updated_at = datetime.now(timezone.utc)
                 self._persist_locked(job)
@@ -219,14 +219,14 @@ class JobManager:
             logger.exception("Unexpected error in parcel search job %s", job_id)
             self._fail(
                 job_id,
-                "The search stopped because of an unexpected internal error. Check the server log.",
+                "Analiza se je ustavila zaradi nepričakovane notranje napake. Podrobnosti so zabeležene v dnevniku strežnika.",
             )
 
     def _fail(self, job_id: str, error: str) -> None:
         with self._lock:
             job = self._jobs[job_id]
             job.status = JobStatus.failed
-            job.message = "Search failed."
+            job.message = "Analiza ni uspela."
             job.error = error
             job.updated_at = datetime.now(timezone.utc)
             self._persist_locked(job)

@@ -40,7 +40,7 @@ class ResilientHTTPClient:
             return response.json()
         except ValueError as exc:
             raise UpstreamServiceError(
-                f"The official service returned an unreadable response from {response.url.host}."
+                f"Uradna storitev {response.url.host} je vrnila neberljiv odgovor."
             ) from exc
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
@@ -66,7 +66,7 @@ class ResilientHTTPClient:
                     time.sleep(0.5 * (2**attempt))
                     continue
         raise UpstreamServiceError(
-            "An official data service is temporarily unavailable. Please try again later."
+            "Uradna podatkovna storitev trenutno ni dosegljiva. Poskusite znova pozneje."
         ) from last_error
 
 
