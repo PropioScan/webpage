@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -60,6 +61,8 @@ class _Fonts:
     def __init__(self) -> None:
         regular_path = _font_path("DejaVuSans.ttf")
         bold_path = _font_path("DejaVuSans-Bold.ttf")
+        self.regular_buffer: bytes | None = None
+        self.bold_buffer: bytes | None = None
         if regular_path and bold_path:
             self.regular_name = "PropioRegular"
             self.bold_name = "PropioBold"
@@ -68,17 +71,28 @@ class _Fonts:
             self.regular = pymupdf.Font(fontfile=self.regular_path)
             self.bold = pymupdf.Font(fontfile=self.bold_path)
         else:
-            self.regular_name = "helv"
-            self.bold_name = "hebo"
+            self.regular_name = "PropioRegular"
+            self.bold_name = "PropioBold"
             self.regular_path = None
             self.bold_path = None
-            self.regular = pymupdf.Font("helv")
-            self.bold = pymupdf.Font("hebo")
+            self.regular_buffer = _builtin_unicode_font(False)
+            self.bold_buffer = _builtin_unicode_font(True)
+            if self.regular_buffer and self.bold_buffer:
+                self.regular = pymupdf.Font(fontbuffer=self.regular_buffer)
+                self.bold = pymupdf.Font(fontbuffer=self.bold_buffer)
+            else:
+                self.regular_name = "helv"
+                self.bold_name = "hebo"
+                self.regular = pymupdf.Font("helv")
+                self.bold = pymupdf.Font("hebo")
 
     def install(self, page: pymupdf.Page) -> None:
         if self.regular_path:
             page.insert_font(fontname=self.regular_name, fontfile=self.regular_path)
             page.insert_font(fontname=self.bold_name, fontfile=self.bold_path)
+        elif self.regular_buffer and self.bold_buffer:
+            page.insert_font(fontname=self.regular_name, fontbuffer=self.regular_buffer)
+            page.insert_font(fontname=self.bold_name, fontbuffer=self.bold_buffer)
 
 
 class _ReportWriter:
@@ -1179,6 +1193,34 @@ def _font_path(filename: str) -> Path | None:
         Path("/usr/local/share/fonts") / filename,
     )
     return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+@lru_cache(maxsize=2)
+def _builtin_unicode_font(bold: bool) -> bytes | None:
+    """Extract MuPDF's compact Unicode font for hosts without system fonts."""
+
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=200, height=60)
+        weight = "bold" if bold else "normal"
+        page.insert_htmlbox(
+            pymupdf.Rect(0, 0, 190, 50),
+            "ČŠŽ čšž",
+            css=(
+                "* { font-family: sans-serif; font-size: 12px; "
+                f"font-weight: {weight}; }}"
+            ),
+        )
+        fonts = page.get_fonts(full=True)
+        if not fonts:
+            return None
+        extracted = document.extract_font(fonts[0][0])
+        font_buffer = extracted[3]
+        return bytes(font_buffer) if font_buffer else None
+    except Exception:
+        return None
+    finally:
+        document.close()
 
 
 def _clip(text: str, limit: int) -> str:

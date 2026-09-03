@@ -355,6 +355,19 @@ def test_generated_pdf_embeds_the_planning_drawing_and_legend(tmp_path):
     assert sum(len(page.get_images(full=True)) for page in document) >= 1
 
 
+def test_generated_pdf_keeps_slovenian_characters_without_system_fonts(monkeypatch):
+    monkeypatch.setattr("app.report._font_path", lambda _filename: None)
+
+    pdf = generate_location_report(result())
+
+    document = pymupdf.open(stream=pdf, filetype="pdf")
+    text = "\n".join(page.get_text() for page in document)
+    assert "Šentvid nad Ljubljano" in text
+    assert "OBMOČJE IN ČAS IZPISA" in text
+    assert "ZAČASNI UKREPI" in text
+    assert any("Nimbus Sans" in font[3] for page in document for font in page.get_fonts())
+
+
 def test_report_resolves_only_an_existing_local_map_preview(tmp_path):
     preview = tmp_path / "map_previews" / "257973" / "drawing.png"
     preview.parent.mkdir(parents=True)
