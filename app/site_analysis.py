@@ -1400,6 +1400,15 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
         ),
     }
     overlay_url = f"{KN_WMS_URL}?{urlencode(overlay_params)}"
+    ordered_boundary_params = {
+        **common,
+        "LAYERS": "SI.GURS.KN:UREJENE_MEJE",
+        "FORMAT": "image/png",
+        "TRANSPARENT": "TRUE",
+    }
+    ordered_boundary_url = (
+        f"{KN_WMS_URL}?{urlencode(ordered_boundary_params)}"
+    )
     infrastructure_params = {
         **common,
         "LAYERS": ",".join(
@@ -1444,6 +1453,7 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
     return ParcelMap(
         orthophoto_url=orthophoto_url,
         parcel_overlay_url=overlay_url,
+        ordered_boundary_overlay_url=ordered_boundary_url,
         infrastructure_overlay_url=infrastructure_url,
         legal_regime_overlay_url=legal_regime_url,
         legal_regime_additional_overlay_urls=additional_regime_urls,
@@ -1454,6 +1464,7 @@ def build_parcel_map(parcel: GURSParcel) -> ParcelMap:
         note=(
             "Ortofoto in katastrski prikaz imata lahko različna datuma zajema. "
             "Prikaz meje ni geodetska zakoličba in ne nadomešča ureditve meje na terenu. "
+            "Poudarjene mejne daljice prikazuje uradni sloj GURS Urejene meje. "
             "Evidentirani komunalni vodi (GJI) so posplošeni in informativni; lega na "
             "karti ne pomeni priključka ali soglasja upravljavca. Geometrijska priloga "
             "pravnih režimov prikazuje evidentirane osi in objekte, ne pa nujno uradnega "

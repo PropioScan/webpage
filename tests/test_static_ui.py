@@ -91,6 +91,19 @@ def test_location_report_includes_the_planning_drawing_and_legend():
     assert "buildAreaLegend(assessment, planningMap?.legend_url)" in script
 
 
+def test_section_one_renders_boundary_status_and_ordered_boundary_map_layer():
+    script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert '"Urejenost meje parcele"' in script
+    assert 'boundary?.label || parcel.administrative_status' in script
+    assert "ordered_boundary_overlay_url" in script
+    assert "Urejena mejna daljica GURS" in script
+    assert ".boundary-result.is-ordered" in styles
+    assert ".boundary-result.is-partially_ordered" in styles
+    assert ".boundary-result.is-not_ordered" in styles
+
+
 def test_location_report_has_structured_regime_fields_and_map_appendix():
     script = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 

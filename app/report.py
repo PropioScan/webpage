@@ -828,6 +828,7 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
         )
 
     municipality = parcel.municipality or "občina ni bila določena"
+    boundary = parcel.boundary_assessment
     map_evidence = _report_map_evidence(result)
     has_map_preview = bool(map_evidence and map_evidence.preview_url)
     return (
@@ -840,8 +841,30 @@ def build_report_sections(result: SearchResult) -> tuple[ReportSection, ...]:
                 ReportField("Številka zemljiške parcele", parcel.parcel_number),
                 ReportField("Občina", municipality),
                 ReportField("Površina", f"{parcel.area_m2:,} m²".replace(",", ".") if parcel.area_m2 is not None else "Podatek ni na voljo"),
+                ReportField(
+                    "Urejenost meje parcele",
+                    boundary.label
+                    if boundary
+                    else parcel.administrative_status or "Ni mogoče določiti",
+                ),
+                ReportField(
+                    "Dokaz iz evidence GURS",
+                    boundary.detail
+                    if boundary
+                    else "Podatek o posameznih mejnih daljicah ni bil vrnjen",
+                ),
+                ReportField(
+                    "Natančnost mejnih daljic",
+                    "; ".join(boundary.accuracy_descriptions)
+                    if boundary and boundary.accuracy_descriptions
+                    else "Podrobna natančnost ni bila vrnjena",
+                ),
+                ReportField(
+                    "Metoda določitve površine",
+                    parcel.area_determination_method or "Podatek ni na voljo",
+                ),
             ),
-            "Identifikacijo in površino primerjajte z aktualnim stanjem v katastru nepremičnin GURS.",
+            "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS označene kot urejene; delno urejena pomeni, da je urejen le del daljic. Podatek ne nadomešča geodetske zakoličbe.",
         ),
         ReportSection(
             2,

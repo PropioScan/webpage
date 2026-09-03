@@ -541,6 +541,7 @@ function renderOfficialForm(result, jobId) {
   const preemptionRight = result.preemption_right;
   const assessment = result.land_use_assessment;
   const planningMap = result.planning_land_use_map;
+  const boundary = parcel.boundary_assessment;
   const planningDrawing = (planningMap?.evidence || []).find((item) => item.preview_url)
     || planningMap?.evidence?.[0]
     || null;
@@ -617,8 +618,23 @@ function renderOfficialForm(result, jobId) {
         ["Številka zemljiške parcele", parcel.parcel_number],
         ["Občina", parcel.municipality || "občina ni bila določena"],
         ["Površina", parcel.area_m2 == null ? "Podatek ni na voljo" : `${formatNumber(parcel.area_m2)} m²`],
+        [
+          "Urejenost meje parcele",
+          boundary?.label || parcel.administrative_status || "Ni mogoče določiti",
+          boundary?.source_url || parcel.source_url,
+          boundary ? `boundary-result is-${boundary.status}` : "boundary-result is-unknown",
+        ],
+        [
+          "Dokaz iz evidence GURS",
+          boundary?.detail || "Podatek o posameznih mejnih daljicah ni bil vrnjen",
+        ],
+        [
+          "Natančnost mejnih daljic",
+          boundary?.accuracy_descriptions?.join("; ") || "Podrobna natančnost ni bila vrnjena",
+        ],
+        ["Metoda določitve površine", parcel.area_determination_method || "Podatek ni na voljo"],
       ],
-      hint: "Identifikacijo in površino primerjajte z aktualnim stanjem v katastru nepremičnin GURS.",
+      hint: "Urejena pomeni, da so vse mejne daljice v javni evidenci GURS označene kot urejene. Delno urejena pomeni, da je urejen le del daljic. Poudarjene črte v karti Hitrega pregleda prikazuje uradni sloj GURS Urejene meje; prikaz ne nadomešča geodetske zakoličbe.",
     },
     {
       number: 2,
@@ -805,9 +821,9 @@ function officialSection(sectionData) {
   header.append(title, element("span", `report-status is-${sectionData.status}`, statusLabel));
 
   const rows = element("div", "official-section-rows");
-  sectionData.rows.forEach(([label, value, sourceUrl]) => {
+  sectionData.rows.forEach(([label, value, sourceUrl, valueClass]) => {
     const row = element("div", "official-field-row");
-    const valueCell = element("strong", "", value || "Podatek ni na voljo");
+    const valueCell = element("strong", valueClass || "", value || "Podatek ni na voljo");
     if (sourceUrl) valueCell.append(" ", link(sourceUrl, "Odpri vir ↗", "official-inline-source"));
     row.append(element("span", "", label), valueCell);
     rows.append(row);
@@ -996,14 +1012,23 @@ function buildParcelVisual(map) {
   orthophoto.src = map.orthophoto_url;
   orthophoto.alt = "Uradni ortofoto GURS okoli parcele";
   orthophoto.loading = "eager";
-  const overlay = element("img", "parcel-map-overlay");
+  let orderedBoundary = null;
+  if (map.ordered_boundary_overlay_url) {
+    orderedBoundary = element("img", "parcel-map-overlay ordered-boundary-overlay");
+    orderedBoundary.src = map.ordered_boundary_overlay_url;
+    orderedBoundary.alt = "Urejene mejne daljice po uradnem sloju GURS";
+    orderedBoundary.loading = "eager";
+  }
+  const overlay = element("img", "parcel-map-overlay target-parcel-overlay");
   overlay.src = map.parcel_overlay_url;
   overlay.alt = "Obris iskane parcele";
   overlay.loading = "eager";
-  frame.append(orthophoto, overlay);
+  frame.append(orthophoto);
+  if (orderedBoundary) frame.append(orderedBoundary);
+  frame.append(overlay);
   let infrastructure = null;
   if (map.infrastructure_overlay_url) {
-    infrastructure = element("img", "parcel-map-overlay");
+    infrastructure = element("img", "parcel-map-overlay infrastructure-map-overlay");
     infrastructure.src = map.infrastructure_overlay_url;
     infrastructure.alt = "Evidentirana komunalna opremljenost (GJI)";
     infrastructure.loading = "eager";
@@ -1119,6 +1144,11 @@ function buildParcelLegend(map, onInfrastructureToggle) {
   const photo = element("span", "parcel-legend-item");
   photo.append(element("i", "orthophoto-swatch"), document.createTextNode("Ortofoto posnetek GURS"));
   items.append(outline, photo);
+  if (map?.ordered_boundary_overlay_url) {
+    const ordered = element("span", "parcel-legend-item");
+    ordered.append(element("i", "ordered-boundary-swatch"), document.createTextNode("Urejena mejna daljica GURS"));
+    items.append(ordered);
+  }
   if (map?.infrastructure_overlay_url && onInfrastructureToggle) {
     GJI_MAP_LAYERS.forEach((spec) => {
       const item = element("label", "parcel-legend-item parcel-legend-toggle");
@@ -1329,16 +1359,18 @@ function renderParcel(parcel) {
   primary.append(id, place);
 
   const facts = element("div", "fact-grid");
+  const boundary = parcel.boundary_assessment;
   const factRows = [
     ["Area", parcel.area_m2 == null ? "Not available" : `${formatNumber(parcel.area_m2)} m²`, parcel.area_determination_method],
-    ["Boundary status", parcel.administrative_status, null],
+    ["Urejenost meje", boundary?.label || parcel.administrative_status, boundary?.detail, boundary?.status],
     ["Land quality score", parcel.quality_score, null],
     ["Cadastral income", parcel.cadastral_income_eur == null ? "Not available" : formatMoney(parcel.cadastral_income_eur), null],
     ["Building parcel", parcel.building_parcel, null],
     ["Restriction in KN", parcel.restriction_recorded, null],
   ];
-  factRows.forEach(([label, value, note]) => {
+  factRows.forEach(([label, value, note, boundaryStatus]) => {
     const fact = element("div", "fact");
+    if (boundaryStatus) fact.classList.add("boundary-fact", `is-${boundaryStatus}`);
     fact.append(element("span", "", label), element("strong", "", value ?? "Not available"));
     if (note) fact.append(element("small", "", note));
     facts.append(fact);

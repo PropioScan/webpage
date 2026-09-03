@@ -1,7 +1,7 @@
 import httpx
 
 from app.config import Settings
-from app.gurs import GURSClient, parse_parcel_reference
+from app.gurs import GURSClient, classify_boundary_status, parse_parcel_reference
 
 
 def test_parse_parcel_reference_accepts_slash_and_normalizes_spaces():
@@ -32,6 +32,24 @@ def test_gurs_combines_cadastre_and_valuation(settings: Settings):
                         "N_CEN": 1.5,
                     },
                 }
+            ]
+        elif layer == "SI.GURS.KN:DALJICE":
+            features = [
+                {
+                    "geometry": {"type": "LineString", "coordinates": coordinates},
+                    "properties": {
+                        "EID_DALJICA": f"line-{index}",
+                        "UPRAVNI_STATUSI_NAZIV_SL": "ni urejena",
+                    },
+                }
+                for index, coordinates in enumerate(
+                    (
+                        [[1, 1], [2, 1]],
+                        [[2, 1], [2, 2]],
+                        [[2, 2], [1, 1]],
+                    ),
+                    start=1,
+                )
             ]
         elif layer == "SI.GURS.EV:PARCELA":
             features = [
@@ -75,3 +93,37 @@ def test_gurs_combines_cadastre_and_valuation(settings: Settings):
     assert parcel.information.official_valuation_eur == 3700
     assert parcel.information.valuation_units[0].model_code == "GOZ"
     assert parcel.information.land_use[0].share_percent == 100
+    assert parcel.information.boundary_assessment is not None
+    assert parcel.information.boundary_assessment.label == "Ni urejena"
+    assert parcel.information.boundary_assessment.total_segments == 3
+    assert parcel.information.boundary_assessment.evidence_complete is True
+
+
+def test_boundary_status_has_ordered_partial_and_not_ordered_classes():
+    ordered = classify_boundary_status(
+        raw_boundary_status="urejena",
+        total_segments=4,
+        ordered_segments=4,
+        evidence_complete=True,
+    )
+    partial = classify_boundary_status(
+        raw_boundary_status="ni urejena",
+        total_segments=5,
+        ordered_segments=2,
+        evidence_complete=True,
+    )
+    not_ordered = classify_boundary_status(
+        raw_boundary_status="ni urejena",
+        total_segments=3,
+        ordered_segments=0,
+        evidence_complete=True,
+    )
+
+    assert ordered.status == "ordered"
+    assert ordered.label == "Urejena"
+    assert "4 od 4" in ordered.detail
+    assert partial.status == "partially_ordered"
+    assert partial.label == "Delno urejena"
+    assert "2 od 5" in partial.detail
+    assert not_ordered.status == "not_ordered"
+    assert not_ordered.label == "Ni urejena"

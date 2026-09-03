@@ -186,6 +186,14 @@ main { min-width: 0; flex: 1; overflow: hidden; }
 .fact span, .valuation-row span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .8px; }
 .fact strong { display: block; margin-top: 5px; font: 700 13px "Manrope", sans-serif; }
 .fact small { color: #929a95; font-size: 8px; }
+.boundary-fact.is-ordered strong, .boundary-result.is-ordered { color: #26723d; }
+.boundary-fact.is-partially_ordered strong, .boundary-result.is-partially_ordered { color: #a56b0b; }
+.boundary-fact.is-not_ordered strong, .boundary-result.is-not_ordered { color: #a13e36; }
+.boundary-fact.is-unknown strong, .boundary-result.is-unknown { color: #68736d; }
+.boundary-result { display: inline-flex; width: max-content; margin: 10px 18px; padding: 6px 10px !important; border-radius: 999px; background: #eef1ee; font-weight: 850 !important; }
+.boundary-result.is-ordered { background: #e6f3e8; }
+.boundary-result.is-partially_ordered { background: #fff4d9; }
+.boundary-result.is-not_ordered { background: #fbe9e6; }
 .valuation-card { padding: 20px; border: 1px solid #dbe2d6; border-radius: 11px; background: #e8eee2; }
 .valuation-card > span { color: #65715f; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
 .valuation-card > strong { margin: 5px 0 12px; display: block; color: var(--green-dark); font: 800 27px "Manrope", sans-serif; letter-spacing: -1.2px; }
@@ -642,6 +650,10 @@ footer { padding: 26px 36px; font-size: 10px; }
 .parcel-legend-item { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .parcel-legend-item i { width: 24px; height: 13px; display: inline-block; border-radius: 3px; }
 .parcel-outline-swatch { border: 2px solid #d63831; background: rgba(255,255,255,.65); }
+.ordered-boundary-swatch { border-top: 4px solid #171717; border-bottom: 4px solid #171717; background: #f4d047; }
+.ordered-boundary-overlay { z-index: 1; }
+.infrastructure-map-overlay { z-index: 2; }
+.target-parcel-overlay { z-index: 3; }
 .orthophoto-swatch { border: 1px solid #9ba895; background: linear-gradient(135deg, #6c855f, #c3b28a 55%, #54735b); }
 .gji-water-swatch { background: #151b8d; border: 1px solid rgba(0,0,0,.25); }
 .gji-sewer-swatch { background: #7e3517; }

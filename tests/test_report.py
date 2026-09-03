@@ -7,6 +7,7 @@ from app.models import (
     AssessmentTone,
     LandUseAssessment,
     LandUseAssessmentItem,
+    ParcelBoundaryAssessment,
     ParcelInformation,
     PlanningCondition,
     PlanningContext,
@@ -46,6 +47,33 @@ def test_report_uses_all_official_sections_and_marks_unknowns_for_review():
     assert sections[4].status == "review"
     assert sections[6].status == "review"
     assert sections[7].status == "review"
+
+
+def test_section_one_reports_ordered_boundary_with_gurs_evidence():
+    report_result = result()
+    report_result.parcel.area_determination_method = "Iz koordinat"
+    report_result.parcel.boundary_assessment = ParcelBoundaryAssessment(
+        status="ordered",
+        label="Urejena",
+        detail=(
+            "Vseh 4 od 4 mejnih daljic parcele je v javni evidenci GURS "
+            "označenih kot urejenih."
+        ),
+        total_segments=4,
+        ordered_segments=4,
+        evidence_complete=True,
+        accuracy_descriptions=[
+            "Koordinate so določene s točnostjo do 1 m ob 95% intervalu zaupanja."
+        ],
+    )
+
+    section = build_report_sections(report_result)[0]
+    fields = {field.label: field.value for field in section.fields}
+
+    assert fields["Urejenost meje parcele"] == "Urejena"
+    assert "4 od 4" in fields["Dokaz iz evidence GURS"]
+    assert "točnostjo do 1 m" in fields["Natančnost mejnih daljic"]
+    assert fields["Metoda določitve površine"] == "Iz koordinat"
 
 
 def test_section_seven_explains_detected_land_use_codes():

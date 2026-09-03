@@ -84,6 +84,8 @@ def test_parcel_map_uses_official_orthophoto_and_filtered_overlay():
     assert "DOF025" in result.orthophoto_url
     assert "PARCELE" in result.parcel_overlay_url
     assert "314%2F4" in result.parcel_overlay_url
+    assert result.ordered_boundary_overlay_url is not None
+    assert "UREJENE_MEJE" in result.ordered_boundary_overlay_url
     assert result.infrastructure_overlay_url is not None
     for layer in (
         "LINIJE_VODOVOD_G",

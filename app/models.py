@@ -29,6 +29,18 @@ class LandUseShare(BaseModel):
     share_percent: float | None = None
 
 
+class ParcelBoundaryAssessment(BaseModel):
+    status: Literal["ordered", "partially_ordered", "not_ordered", "unknown"]
+    label: str
+    detail: str
+    total_segments: int = 0
+    ordered_segments: int = 0
+    evidence_complete: bool = False
+    accuracy_descriptions: list[str] = Field(default_factory=list)
+    source: str = "GURS – Kataster nepremičnin, mejne daljice"
+    source_url: str = "https://ipi.eprostor.gov.si/jv/"
+
+
 class ParcelInformation(BaseModel):
     parcel_number: str
     cadastral_municipality_id: int
@@ -44,6 +56,7 @@ class ParcelInformation(BaseModel):
     cadastral_income_eur: float | None = None
     building_parcel: str | None = None
     restriction_recorded: str | None = None
+    boundary_assessment: ParcelBoundaryAssessment | None = None
     centroid_e: float | None = None
     centroid_n: float | None = None
     data_timestamp: str | None = None
@@ -139,6 +152,7 @@ class SpatialFinding(BaseModel):
 class ParcelMap(BaseModel):
     orthophoto_url: str
     parcel_overlay_url: str
+    ordered_boundary_overlay_url: str | None = None
     infrastructure_overlay_url: str | None = None
     legal_regime_overlay_url: str | None = None
     legal_regime_additional_overlay_urls: list[str] = Field(default_factory=list)
